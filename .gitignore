@@ -1,0 +1,34 @@
+# Local configuration and secrets
+.env
+.env.local
+*.pem
+*.key
+kubeconfig*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Generated output
+dist/
+build/
+artifacts/
