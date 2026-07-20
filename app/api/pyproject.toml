@@ -3,6 +3,7 @@ name = "portfolio-api"
 version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "aiosqlite>=0.22.1",
     "alembic>=1.18.5",
     "asyncpg>=0.31.0",
     "email-validator>=2.3.0",
@@ -15,7 +16,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "aiosqlite>=0.22.1",
     "httpx>=0.28.1",
     "mypy>=2.3.0",
     "pytest>=9.1.1",
