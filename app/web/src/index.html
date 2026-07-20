@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Darren Li - Senior DevOps Engineer focused on cloud platforms, Kubernetes, and delivery automation."
+    />
+
+    <title>Darren Li | Senior DevOps Engineer</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+
+  <body id="top">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <header class="site-header">
+      <nav class="nav shell" aria-label="Primary navigation">
+        <a class="brand" href="#top" aria-label="Darren Li home">DL</a>
+
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="nav-links"
+        >
+          Menu
+        </button>
+
+        <div class="nav-links" id="nav-links">
+          <a href="#about">About</a>
+          <a href="#skills">Skills</a>
+          <a href="#project">Project</a>
+          <a href="#contact">Contact</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <section class="hero shell">
+        <div class="hero-copy">
+          <p class="eyebrow">Senior DevOps Engineer</p>
+          <h1>Reliable platforms.<br />Repeatable delivery.</h1>
+          <p class="hero-summary">
+            I build cloud platforms and delivery workflows that help teams ship
+            safely, observe clearly, and recover confidently.
+          </p>
+
+          <div class="hero-actions">
+            <a class="button button-primary" href="#contact">Contact me</a>
+            <a class="button button-secondary" href="#project">
+              View the platform
+            </a>
+          </div>
+        </div>
+
+        <ul class="hero-highlights" aria-label="Platform highlights">
+          <li>
+            <strong>5</strong>
+            <span>deployment environments</span>
+          </li>
+          <li>
+            <strong>IaC</strong>
+            <span>Terraform-managed infrastructure</span>
+          </li>
+          <li>
+            <strong>K8s</strong>
+            <span>container orchestration</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="section shell" id="about">
+        <div class="section-heading">
+          <p class="eyebrow">About</p>
+          <h2>Engineering for change, not just launch day.</h2>
+        </div>
+
+        <div class="two-column">
+          <p>
+            My focus is building practical platform foundations: infrastructure
+            as code, secure container delivery, useful observability, and
+            operationally clear deployment patterns.
+          </p>
+          <p>
+            I prefer small, reviewable changes and automated controls that make
+            production delivery safer without slowing development teams down.
+          </p>
+        </div>
+      </section>
+
+      <section class="section section-muted" id="skills">
+        <div class="shell">
+          <div class="section-heading">
+            <p class="eyebrow">Core skills</p>
+            <h2>From infrastructure to delivery.</h2>
+          </div>
+
+          <div class="card-grid">
+            <article class="skill-card">
+              <h3>Cloud and IaC</h3>
+              <p>Alibaba Cloud, AWS, Terraform, networking, managed services</p>
+            </article>
+
+            <article class="skill-card">
+              <h3>Containers</h3>
+              <p>Docker, Kubernetes, Helm, Kustomize, workload reliability</p>
+            </article>
+
+            <article class="skill-card">
+              <h3>Delivery</h3>
+              <p>
+                GitHub Actions, pipeline as code, testing, security scanning
+              </p>
+            </article>
+
+            <article class="skill-card">
+              <h3>Operations</h3>
+              <p>Prometheus metrics, health checks, incident-ready design</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section shell" id="project">
+        <div class="section-heading">
+          <p class="eyebrow">Featured project</p>
+          <h2>Cloud-native portfolio platform.</h2>
+        </div>
+
+        <article class="project-card">
+          <div>
+            <p class="project-label">DevOps assessment</p>
+            <h3>One workload, five controlled environments</h3>
+            <p>
+              This portfolio is the workload for a production-style platform
+              covering dev, test, perf, staging, and production.
+            </p>
+          </div>
+
+          <ul class="tag-list" aria-label="Project technologies">
+            <li>Terraform</li>
+            <li>Alibaba Cloud</li>
+            <li>Kubernetes</li>
+            <li>FastAPI</li>
+            <li>PostgreSQL</li>
+            <li>GitHub Actions</li>
+          </ul>
+
+          <a
+            class="text-link"
+            href="https://github.com/dongli0/devops-assessment"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View source on GitHub
+          </a>
+        </article>
+      </section>
+
+      <section class="section section-contact" id="contact">
+        <div class="shell contact-layout">
+          <div class="section-heading">
+            <p class="eyebrow">Contact</p>
+            <h2>Let's build something reliable.</h2>
+            <p>
+              Send a message through the platform API. No personal email address
+              needs to be exposed in the page source.
+            </p>
+          </div>
+
+          <form class="contact-form" id="contact-form">
+            <label for="name">Name</label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              autocomplete="name"
+              maxlength="80"
+              required
+            />
+
+            <label for="email">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              required
+            />
+
+            <label for="message">Message</label>
+            <textarea
+              id="message"
+              name="message"
+              rows="5"
+              maxlength="2000"
+              required
+            ></textarea>
+
+            <button class="button button-primary" type="submit">
+              Send message
+            </button>
+            <p
+              class="form-status"
+              id="form-status"
+              role="status"
+              aria-live="polite"
+            ></p>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell">
+        <p>&copy; <span id="current-year">2026</span> Darren Li</p>
+        <p>Built as code, delivered through automation.</p>
+      </div>
+    </footer>
+  </body>
+</html>
