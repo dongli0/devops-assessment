@@ -11,6 +11,7 @@ from portfolio_api.database import (
     close_database,
 )
 from portfolio_api.environments import Environment
+from portfolio_api.metrics import router as metrics_router
 from portfolio_api.routes import router as portfolio_router
 
 
@@ -29,6 +30,7 @@ app = FastAPI(
 )
 
 app.include_router(portfolio_router)
+app.include_router(metrics_router)
 
 
 class HealthResponse(BaseModel):
