@@ -1,5 +1,12 @@
+from collections.abc import AsyncIterator
+
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from portfolio_api.config import get_settings
 
@@ -14,6 +21,16 @@ def create_database_engine() -> AsyncEngine:
 
 
 engine = create_database_engine()
+
+session_factory = async_sessionmaker(
+    bind=engine,
+    expire_on_commit=False,
+)
+
+
+async def get_database_session() -> AsyncIterator[AsyncSession]:
+    async with session_factory() as session:
+        yield session
 
 
 async def check_database_connection() -> None:

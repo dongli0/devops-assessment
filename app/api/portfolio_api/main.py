@@ -11,6 +11,7 @@ from portfolio_api.database import (
     close_database,
 )
 from portfolio_api.environments import Environment
+from portfolio_api.routes import router as portfolio_router
 
 
 @asynccontextmanager
@@ -26,6 +27,8 @@ app = FastAPI(
     redoc_url=None,
     lifespan=lifespan,
 )
+
+app.include_router(portfolio_router)
 
 
 class HealthResponse(BaseModel):
