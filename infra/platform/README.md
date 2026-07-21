@@ -45,11 +45,14 @@ The ALB Ingress Controller creates and manages the public ALB from the repositor
 - ACS profile with no worker nodes
 - No automatically created NAT Gateway
 - Public Kubernetes API enabled for GitHub-hosted deployment runners
+- Terraform preconditions enforce vSwitch containment and CIDR non-overlap
 - RDS reachable only through the VPC
-- RDS access restricted to the platform vSwitch CIDRs and Security Group
+- RDS network access permits the two platform vSwitch CIDRs and the ACS Security Group
 - Five separate databases and accounts on one RDS instance
 - No unused RRSA or application object-storage configuration
 - Deletion protection disabled only to support controlled assessment teardown
+
+RDS IP whitelists and Security Groups are independent network authorization paths, not an intersection. Workloads within an allowed vSwitch CIDR can attempt a connection, but each environment still requires its own database credentials. This shared-VPC boundary is accepted for the cost-optimized assessment topology.
 
 This is a cost-optimized assessment topology, not a production reference architecture.
 
@@ -59,10 +62,11 @@ Before planning this stack:
 
 1. Activate the required Alibaba Cloud services.
 2. Complete the ACS default-role authorization using the Alibaba Cloud account.
-3. Apply the `infra/bootstrap` stack.
-4. Configure the OSS remote backend.
-5. Authenticate using either the local OAuth profile or the GitHub OIDC role.
-6. Select two distinct zones supported by both ALB and PostgreSQL Serverless Basic.
+3. Authorize the RDS PostgreSQL service-linked role `AliyunServiceRoleForRdsPgsqlOnEcs` using the Alibaba Cloud account.
+4. Apply the `infra/bootstrap` stack.
+5. Configure the OSS remote backend.
+6. Authenticate using either the local OAuth profile or the GitHub OIDC role.
+7. Select two distinct zones supported by both ALB and PostgreSQL Serverless Basic.
 
 Do not grant GitHub Actions administrator, product FullAccess, billing, or general RAM permissions.
 
@@ -149,14 +153,17 @@ chmod 600 infra/platform/terraform.tfvars
 
 Configure two distinct vSwitch zones and CIDR blocks.
 
-Before planning, verify:
+Terraform preconditions enforce that:
+
+- both vSwitch CIDRs are fully contained within the VPC CIDR;
+- the two vSwitch CIDRs do not overlap;
+- the Kubernetes Service CIDR does not overlap the VPC CIDR.
+
+Before planning, manually verify that:
 
 - both zones belong to `cn-shanghai`;
 - both zones support ALB;
-- the RDS zone supports PostgreSQL 14 Serverless Basic;
-- both vSwitch CIDRs are inside the VPC CIDR;
-- the vSwitch CIDRs do not overlap;
-- the Kubernetes Service CIDR does not overlap the VPC or vSwitch CIDRs.
+- the selected RDS zone currently supports PostgreSQL 14 Serverless Basic and the configured `pg.n2.serverless.1c` class.
 
 A null `kubernetes_version` lets Alibaba Cloud select the current supported version during initial creation. Pin the resulting version before future upgrades.
 
@@ -249,6 +256,8 @@ Before destroying the platform:
 7. Verify that no billable ACS, RDS, ALB, or related resources remain.
 8. Remove manually managed ACR resources if they are no longer needed.
 9. Destroy the bootstrap stack only after platform state is no longer required.
+
+The ACS `delete_options` configuration deletes controller-created ALB resources as a final teardown safeguard. It does not replace removing the Ingress and `AlbConfig` resources first and waiting for controller cleanup.
 
 Create and inspect the destroy plan with:
 
