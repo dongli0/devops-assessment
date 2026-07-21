@@ -1,0 +1,8 @@
+bucket              = "replace-with-state-bucket"
+prefix              = "devops-assessment/platform"
+key                 = "terraform.tfstate"
+region              = "cn-shanghai"
+tablestore_endpoint = "https://example.cn-shanghai.ots.aliyuncs.com"
+tablestore_table    = "terraform_locks"
+encrypt             = true
+acl                 = "private"
