@@ -10,6 +10,42 @@ resource "alicloud_vpc" "this" {
   tags = merge(local.common_tags, {
     Component = "network"
   })
+
+  lifecycle {
+    precondition {
+      condition = try(
+        alltrue([
+          for network in values(local.network_ranges.vswitches) :
+          network.first >= local.network_ranges.vpc.first &&
+          network.last <= local.network_ranges.vpc.last
+        ]),
+        false,
+      )
+      error_message = "Every vSwitch CIDR must be fully contained within vpc_cidr."
+    }
+
+    precondition {
+      condition = try(
+        local.network_ranges.vswitches["a"].last <
+        local.network_ranges.vswitches["b"].first ||
+        local.network_ranges.vswitches["b"].last <
+        local.network_ranges.vswitches["a"].first,
+        false,
+      )
+      error_message = "The a and b vSwitch CIDR blocks must not overlap."
+    }
+
+    precondition {
+      condition = try(
+        local.network_ranges.service.last <
+        local.network_ranges.vpc.first ||
+        local.network_ranges.vpc.last <
+        local.network_ranges.service.first,
+        false,
+      )
+      error_message = "kubernetes_service_cidr must not overlap vpc_cidr."
+    }
+  }
 }
 
 resource "alicloud_vswitch" "this" {

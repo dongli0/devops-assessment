@@ -20,6 +20,11 @@ resource "alicloud_cs_managed_kubernetes" "this" {
   deletion_protection            = var.cluster_deletion_protection
   skip_set_certificate_authority = true
 
+  delete_options {
+    resource_type = "ALB"
+    delete_mode   = "delete"
+  }
+
   addons {
     name = "managed-coredns"
   }
