@@ -18,7 +18,6 @@ resource "alicloud_cs_managed_kubernetes" "this" {
   new_nat_gateway                = false
   slb_internet_enabled           = var.cluster_api_public_access
   deletion_protection            = var.cluster_deletion_protection
-  enable_rrsa                    = true
   skip_set_certificate_authority = true
 
   addons {

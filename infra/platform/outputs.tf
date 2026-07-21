@@ -58,14 +58,6 @@ output "cluster_api_endpoints" {
   }
 }
 
-output "cluster_rrsa_oidc_issuer_url" {
-  description = "OIDC issuer URL created for RRSA."
-  value = try(
-    alicloud_cs_managed_kubernetes.this.rrsa_metadata[0].rrsa_oidc_issuer_url,
-    null,
-  )
-}
-
 output "rds_instance_id" {
   description = "ID of the shared PostgreSQL Serverless instance."
   value       = alicloud_db_instance.postgresql.id

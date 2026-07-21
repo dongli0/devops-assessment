@@ -159,7 +159,7 @@ policies, and checks the ALB and migration templates.
 
 For each platform deployment:
 
-1. Apply Terraform for networking, ACS, RDS, and OSS resources.
+1. Apply Terraform for networking, ACS, and RDS resources.
 2. Ensure the ACR Personal namespace and repositories exist.
 3. Verify that Metrics Server is available and install the ALB Ingress Controller
    in **Do not create** mode.
