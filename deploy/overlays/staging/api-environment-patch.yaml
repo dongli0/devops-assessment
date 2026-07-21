@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portfolio-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          env:
+            - name: PORTFOLIO_ENVIRONMENT
+              value: staging
+          startupProbe:
+            httpGet:
+              path: /staging/api/health/live
+          livenessProbe:
+            httpGet:
+              path: /staging/api/health/live
+          readinessProbe:
+            httpGet:
+              path: /staging/api/health/ready
