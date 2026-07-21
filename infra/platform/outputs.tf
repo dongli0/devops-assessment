@@ -65,3 +65,49 @@ output "cluster_rrsa_oidc_issuer_url" {
     null,
   )
 }
+
+output "rds_instance_id" {
+  description = "ID of the shared PostgreSQL Serverless instance."
+  value       = alicloud_db_instance.postgresql.id
+}
+
+output "rds_internal_endpoint" {
+  description = "Internal RDS endpoint used by workloads in the VPC."
+  value = {
+    host = alicloud_db_instance.postgresql.connection_string
+    port = alicloud_db_instance.postgresql.port
+  }
+}
+
+output "database_names" {
+  description = "Database names keyed by environment."
+  value = {
+    for environment in local.environment_names :
+    environment => alicloud_db_database.environment[environment].data_base_name
+  }
+}
+
+output "database_account_names" {
+  description = "Database account names keyed by environment."
+  value = {
+    for environment in local.environment_names :
+    environment => alicloud_rds_account.environment[environment].account_name
+  }
+}
+
+output "database_urls" {
+  description = "SQLAlchemy database URLs keyed by environment."
+  sensitive   = true
+
+  value = {
+    for environment in local.environment_names :
+    environment => format(
+      "postgresql+asyncpg://%s:%s@%s:%s/%s",
+      alicloud_rds_account.environment[environment].account_name,
+      random_password.database[environment].result,
+      alicloud_db_instance.postgresql.connection_string,
+      alicloud_db_instance.postgresql.port,
+      alicloud_db_database.environment[environment].data_base_name,
+    )
+  }
+}

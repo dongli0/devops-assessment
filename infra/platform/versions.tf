@@ -6,5 +6,9 @@ terraform {
       source  = "aliyun/alicloud"
       version = "= 1.285.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "= 3.9.0"
+    }
   }
 }
