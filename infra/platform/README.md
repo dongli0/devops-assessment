@@ -68,15 +68,37 @@ Do not grant GitHub Actions administrator, product FullAccess, billing, or gener
 
 ## Code-Only Validation
 
-These commands validate the configuration without querying or modifying Alibaba Cloud resources:
+From the repository root, validate both Terraform stacks with:
+
+```bash
+./scripts/validate-terraform.sh
+```
+
+The script:
+
+- checks Terraform formatting;
+- validates both provider lock files;
+- prevents generated or sensitive Terraform files from being tracked;
+- initializes each stack with `-backend=false`;
+- uses temporary `TF_DATA_DIR` directories;
+- validates the bootstrap and platform configurations.
+
+Provider initialization may access the configured Terraform registry mirror, but it does not initialize the OSS backend or query Alibaba Cloud resource APIs.
+
+To reuse already installed providers without registry access:
+
+```bash
+TERRAFORM_OFFLINE=1 \
+  ./scripts/validate-terraform.sh
+```
+
+For targeted platform troubleshooting:
 
 ```bash
 terraform -chdir=infra/platform init -backend=false
 terraform -chdir=infra/platform fmt -check
 terraform -chdir=infra/platform validate
 ```
-
-Provider initialization may download plugins from the configured Terraform registry mirror.
 
 ## Configure Remote State
 

@@ -45,7 +45,31 @@ When the platform stack or Alicloud provider changes, review `AccessDenied` erro
 
 ## Code-Only Validation
 
-These commands do not authenticate to or query an Alibaba Cloud account, and they do not create resources. `terraform init` may download provider plugins from the configured registry mirror.
+From the repository root, validate both Terraform stacks with:
+
+```bash
+./scripts/validate-terraform.sh
+```
+
+The script:
+
+- checks Terraform formatting;
+- validates both provider lock files;
+- prevents generated or sensitive Terraform files from being tracked;
+- initializes each stack with `-backend=false`;
+- uses temporary `TF_DATA_DIR` directories;
+- validates the bootstrap and platform configurations.
+
+Provider initialization may access the configured Terraform registry mirror, but it does not initialize the OSS backend or query Alibaba Cloud resource APIs.
+
+To reuse already installed providers without registry access:
+
+```bash
+TERRAFORM_OFFLINE=1 \
+  ./scripts/validate-terraform.sh
+```
+
+For targeted bootstrap troubleshooting:
 
 ```bash
 terraform -chdir=infra/bootstrap init -backend=false
