@@ -64,7 +64,32 @@ Mutable tags such as `latest` must not be deployed.
 The migration Job must use exactly the same API image digest as the API
 Deployment being released.
 
-## Secret Contract
+## Registry Secret Contract
+
+Every environment namespace must contain a private-registry Secret with this
+interface:
+
+| Field           | Value                                                  |
+| --------------- | ------------------------------------------------------ |
+| Secret name     | `portfolio-acr-pull`                                   |
+| Type            | `kubernetes.io/dockerconfigjson`                       |
+| Key             | `.dockerconfigjson`                                    |
+| Registry server | Exact host used by the deployed ACR Personal image URI |
+
+ACR Personal instances created on or after September 9, 2024 do not support the
+credential helper or the `GetAuthorizationToken` API. The delivery pipeline
+therefore creates this namespace-scoped Secret from protected GitHub
+Environment credentials belonging to a read-only RAM user.
+
+The fixed registry password and rendered Secret must never enter Git. The
+registry server must exactly match the image host, such as
+`crpi-example.cn-shanghai.personal.cr.aliyuncs.com`.
+
+See the
+[ACR Personal documentation](https://help.aliyun.com/en/acr/user-guide/use-a-container-registry-personal-edition-instance-to-push-and-pull-images)
+for the current authentication limitations.
+
+## Database Secret Contract
 
 Every environment namespace must contain a Secret with this interface:
 
@@ -131,12 +156,13 @@ For each platform deployment:
 4. Render and apply the shared `AlbConfig`.
 5. Wait for the ALB ID and DNS name, then apply the `IngressClass`.
 6. Create the target namespace.
-7. Create or update the `portfolio-database` Secret.
-8. Render a uniquely named migration Job with the API image digest.
-9. Create the Job and wait for the `Complete` condition.
-10. Stop the release and collect Job logs if migration fails.
-11. Render and apply the target overlay with immutable image digests.
-12. Wait for both Deployment rollouts and run HTTP smoke tests.
+7. Create or update the namespace-local `portfolio-acr-pull` Secret.
+8. Create or update the `portfolio-database` Secret.
+9. Render a uniquely named migration Job with the API image digest.
+10. Create the Job and wait for the `Complete` condition.
+11. Stop the release and collect Job logs if migration fails.
+12. Render and apply the target overlay with immutable image digests.
+13. Wait for both Deployment rollouts and run HTTP smoke tests.
 
 Migrations are not init containers. This prevents concurrent migrations during
 Pod restarts, rolling updates, or HPA scale-out.

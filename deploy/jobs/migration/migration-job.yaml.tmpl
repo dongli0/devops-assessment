@@ -23,6 +23,8 @@ spec:
         environment: "${PORTFOLIO_ENVIRONMENT}"
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: portfolio-acr-pull
       restartPolicy: Never
       securityContext:
         runAsNonRoot: true

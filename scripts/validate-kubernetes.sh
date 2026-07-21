@@ -77,6 +77,7 @@ for environment in "${environments[@]}"; do
   require_count 1 '^kind: Namespace$' "${rendered}"
   require_count 2 '^kind: Service$' "${rendered}"
   require_count 2 '^kind: Deployment$' "${rendered}"
+  require_count 2 'name: portfolio-acr-pull$' "${rendered}"
   require_count 1 '^kind: Ingress$' "${rendered}"
   require_count "${expected_hpas}" '^kind: HorizontalPodAutoscaler$' "${rendered}"
   require_count "${expected_pdbs}" '^kind: PodDisruptionBudget$' "${rendered}"
@@ -123,6 +124,7 @@ kubectl kustomize \
   > "${migration_render}"
 
 require_count 1 '^kind: Job$' "${migration_render}"
+require_count 1 'name: portfolio-acr-pull$' "${migration_render}"
 require_count 1 '\$\{DEPLOYMENT_ID\}' "${migration_render}"
 require_count 1 '\$\{KUBERNETES_NAMESPACE\}' "${migration_render}"
 require_count 1 '\$\{PORTFOLIO_API_IMAGE\}' "${migration_render}"

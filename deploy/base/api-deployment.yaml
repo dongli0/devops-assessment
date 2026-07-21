@@ -27,6 +27,8 @@ spec:
         app.kubernetes.io/part-of: portfolio
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: portfolio-acr-pull
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
