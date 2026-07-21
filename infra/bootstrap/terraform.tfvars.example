@@ -1,2 +1,9 @@
 state_bucket_name  = "replace-with-globally-unique-bucket"
 lock_instance_name = "portfolio-lock"
+github_oidc_fingerprints = [
+  "REPLACE_WITH_40_CHARACTER_SHA1_FINGERPRINT",
+]
+
+github_oidc_subjects = [
+  "REPLACE_WITH_EXACT_GITHUB_OIDC_SUBJECT",
+]

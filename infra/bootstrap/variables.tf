@@ -50,3 +50,37 @@ variable "lock_table_name" {
   type        = string
   default     = "terraform_locks"
 }
+
+variable "github_oidc_fingerprints" {
+  description = "SHA-1 CA fingerprints trusted for the GitHub OIDC issuer."
+  type        = set(string)
+
+  validation {
+    condition = (
+      length(var.github_oidc_fingerprints) >= 1 &&
+      length(var.github_oidc_fingerprints) <= 5 &&
+      alltrue([
+        for fingerprint in var.github_oidc_fingerprints :
+        can(regex("^[0-9A-Fa-f]{40}$", fingerprint))
+      ])
+    )
+    error_message = "Provide between one and five 40-character SHA-1 fingerprints."
+  }
+}
+
+variable "github_oidc_subjects" {
+  description = "Exact GitHub OIDC subject claims allowed to assume the role."
+  type        = set(string)
+
+  validation {
+    condition = (
+      length(var.github_oidc_subjects) >= 1 &&
+      length(var.github_oidc_subjects) <= 10 &&
+      alltrue([
+        for subject in var.github_oidc_subjects :
+        startswith(subject, "repo:") && !strcontains(subject, "*")
+      ])
+    )
+    error_message = "Provide exact repo-scoped OIDC subjects without wildcards."
+  }
+}

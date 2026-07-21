@@ -18,7 +18,22 @@ output "tablestore_endpoint" {
   value       = "https://${alicloud_ots_instance.locks.name}.${var.region}.ots.aliyuncs.com"
 }
 
+output "platform_state_prefix" {
+  description = "OSS prefix reserved for the platform Terraform state."
+  value       = "devops-assessment/platform"
+}
+
 output "platform_state_key" {
-  description = "Object key reserved for the platform Terraform state."
-  value       = "devops-assessment/platform/terraform.tfstate"
+  description = "Object key used for the platform Terraform state."
+  value       = "terraform.tfstate"
+}
+
+output "github_oidc_provider_arn" {
+  description = "OIDC provider ARN configured for GitHub Actions."
+  value       = alicloud_ims_oidc_provider.github.arn
+}
+
+output "github_terraform_role_arn" {
+  description = "RAM role ARN assumed by GitHub Actions."
+  value       = alicloud_ram_role.github.arn
 }
