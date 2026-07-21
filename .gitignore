@@ -36,3 +36,7 @@ crash.log
 dist/
 build/
 artifacts/
+
+backend.hcl
+*.tfvars
+*.tfvars.json
