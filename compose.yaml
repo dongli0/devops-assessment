@@ -1,0 +1,85 @@
+name: portfolio-local
+
+x-api-image: &api-image
+  image: portfolio-api:local
+  build:
+    context: ./app/api
+
+x-api-environment: &api-environment
+  PORTFOLIO_DATABASE_URL: "postgresql+asyncpg://portfolio:${POSTGRES_PASSWORD}@db:5432/portfolio"
+  PORTFOLIO_ENVIRONMENT: dev
+  PORTFOLIO_LOG_LEVEL: INFO
+
+services:
+  db:
+    image: postgres:14.23-alpine
+    environment:
+      POSTGRES_DB: portfolio
+      POSTGRES_USER: portfolio
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Copy .env.example to .env}"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  migrate:
+    <<: *api-image
+    command:
+      - alembic
+      - upgrade
+      - head
+    environment: *api-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *api-image
+    environment: *api-environment
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import urllib.request as u
+          u.urlopen(
+              "http://127.0.0.1:8000/dev/api/health/ready",
+              timeout=2,
+          )
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  web:
+    image: portfolio-web:local
+    build:
+      context: ./app/web
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - type: bind
+        source: ./app/web/nginx/api-proxy.inc
+        target: /etc/nginx/conf.d/portfolio-api.inc
+        read_only: true
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
