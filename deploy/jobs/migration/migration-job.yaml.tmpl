@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "portfolio-migrate-${DEPLOYMENT_ID}"
+  namespace: "${KUBERNETES_NAMESPACE}"
+  labels:
+    app.kubernetes.io/name: portfolio-migrate
+    app.kubernetes.io/component: database-migration
+    app.kubernetes.io/part-of: portfolio
+    app.kubernetes.io/instance: "portfolio-${PORTFOLIO_ENVIRONMENT}"
+    environment: "${PORTFOLIO_ENVIRONMENT}"
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portfolio-migrate
+        app.kubernetes.io/component: database-migration
+        app.kubernetes.io/part-of: portfolio
+        app.kubernetes.io/instance: "portfolio-${PORTFOLIO_ENVIRONMENT}"
+        environment: "${PORTFOLIO_ENVIRONMENT}"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: "${PORTFOLIO_API_IMAGE}"
+          imagePullPolicy: IfNotPresent
+          workingDir: /app
+          command:
+            - alembic
+          args:
+            - upgrade
+            - head
+          env:
+            - name: PORTFOLIO_ENVIRONMENT
+              value: "${PORTFOLIO_ENVIRONMENT}"
+            - name: PORTFOLIO_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: portfolio-database
+                  key: database-url
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+      terminationGracePeriodSeconds: 30
