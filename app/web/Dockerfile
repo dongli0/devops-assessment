@@ -3,6 +3,7 @@
 FROM nginxinc/nginx-unprivileged:1.30.3-alpine
 
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/api-deny.inc /etc/nginx/conf.d/portfolio-api.inc
 COPY src/ /usr/share/nginx/html/
 
 USER 101:101
