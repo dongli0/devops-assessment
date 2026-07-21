@@ -84,3 +84,46 @@ variable "github_oidc_subjects" {
     error_message = "Provide exact repo-scoped OIDC subjects without wildcards."
   }
 }
+
+variable "deployment_cluster_id" {
+  description = "ACS cluster ID authorized for service deployment after platform apply."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.deployment_cluster_id == null ?
+      true :
+      can(regex("^[A-Za-z0-9][A-Za-z0-9-]{7,127}$", var.deployment_cluster_id))
+    )
+    error_message = "deployment_cluster_id must be null or a valid ACS cluster ID."
+  }
+}
+
+variable "github_deploy_oidc_subjects" {
+  description = "Exact GitHub Environment OIDC subjects allowed to deploy services."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = (
+      (
+        var.deployment_cluster_id == null &&
+        length(var.github_deploy_oidc_subjects) == 0
+      ) ||
+      (
+        var.deployment_cluster_id != null &&
+        length(var.github_deploy_oidc_subjects) >= 1 &&
+        length(var.github_deploy_oidc_subjects) <= 10 &&
+        alltrue([
+          for subject in var.github_deploy_oidc_subjects :
+          startswith(subject, "repo:") &&
+          strcontains(subject, ":environment:") &&
+          !strcontains(subject, "*")
+        ])
+      )
+    )
+    error_message = "Configure the cluster ID and one to ten exact GitHub Environment subjects together."
+  }
+}
