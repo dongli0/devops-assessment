@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: portfolio-api
+  labels:
+    app.kubernetes.io/name: portfolio-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: portfolio
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portfolio-api
+      app.kubernetes.io/component: api

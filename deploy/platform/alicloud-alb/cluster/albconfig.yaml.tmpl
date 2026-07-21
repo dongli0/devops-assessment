@@ -1,0 +1,21 @@
+apiVersion: alibabacloud.com/v1
+kind: AlbConfig
+metadata:
+  name: alb-shared
+  labels:
+    app.kubernetes.io/name: portfolio-alb
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: portfolio
+spec:
+  config:
+    name: portfolio-shared
+    addressAllocatedMode: Dynamic
+    addressType: Internet
+    edition: Standard
+    deletionProtectionEnabled: false
+    zoneMappings:
+      - vSwitchId: "${ALB_VSWITCH_ID_A}"
+      - vSwitchId: "${ALB_VSWITCH_ID_B}"
+  listeners:
+    - port: 80
+      protocol: HTTP
