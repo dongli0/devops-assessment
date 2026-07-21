@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: portfolio-perf
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - api-hpa.yaml
+
+patches:
+  - path: api-environment-patch.yaml
+
+replicas:
+  - name: portfolio-api
+    count: 2
+  - name: portfolio-web
+    count: 2
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: portfolio-perf
+      environment: perf
+    includeSelectors: false
+    includeTemplates: true
