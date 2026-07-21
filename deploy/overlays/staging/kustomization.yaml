@@ -5,6 +5,7 @@ namespace: portfolio-staging
 
 resources:
   - ../../base
+  - ../../platform/alicloud-alb/ingress
   - namespace.yaml
   - api-hpa.yaml
   - api-pdb.yaml
@@ -12,6 +13,7 @@ resources:
 
 patches:
   - path: api-environment-patch.yaml
+  - path: ingress-path-patch.yaml
 
 replicas:
   - name: portfolio-api

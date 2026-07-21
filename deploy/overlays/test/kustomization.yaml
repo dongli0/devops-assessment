@@ -5,10 +5,12 @@ namespace: portfolio-test
 
 resources:
   - ../../base
+  - ../../platform/alicloud-alb/ingress
   - namespace.yaml
 
 patches:
   - path: api-environment-patch.yaml
+  - path: ingress-path-patch.yaml
 
 labels:
   - pairs:
