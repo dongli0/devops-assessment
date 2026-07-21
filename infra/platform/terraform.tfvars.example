@@ -1,0 +1,12 @@
+# Verify current ACS, RDS, and ALB support before selecting zones.
+vswitches = {
+  a = {
+    zone_id    = "replace-with-zone-a"
+    cidr_block = "10.20.0.0/20"
+  }
+
+  b = {
+    zone_id    = "replace-with-zone-b"
+    cidr_block = "10.20.16.0/20"
+  }
+}
