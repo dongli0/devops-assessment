@@ -16,6 +16,10 @@ __pycache__/
 coverage.xml
 htmlcov/
 
+# Node
+node_modules/
+npm-debug.log*
+
 # Terraform
 .terraform/
 *.tfstate

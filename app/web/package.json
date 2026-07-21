@@ -1,0 +1,15 @@
+{
+  "name": "portfolio-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static portfolio frontend for the DevOps assessment.",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint:js": "node --check src/app.js",
+    "check": "npm run format:check && npm run lint:js"
+  },
+  "devDependencies": {
+    "prettier": "3.9.5"
+  }
+}
