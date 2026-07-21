@@ -126,10 +126,19 @@ The workloads apply the following defaults:
 Terraform provisions the VPC, two cross-zone vSwitches, and ACS cluster. The ALB
 Ingress Controller owns the ALB instance and listener through `AlbConfig`.
 
-The pipeline renders
-`platform/alicloud-alb/cluster/albconfig.yaml.tmpl` with the two Terraform
-vSwitch outputs. The template must never be applied with unresolved
-`${ALB_VSWITCH_ID_A}` or `${ALB_VSWITCH_ID_B}` values.
+The controller must be installed in **Do not create** mode so that its installer
+does not create a second public ALB. The repository-owned `alb-shared` AlbConfig
+is the only component allowed to create the assessment ALB.
+
+The pipeline passes two vSwitch IDs and their zones from Terraform outputs to
+`scripts/render-alb-config.sh`. The renderer rejects missing or malformed IDs,
+duplicate IDs, same-zone mappings, and unresolved placeholders. The cluster
+Kustomization intentionally contains only the `IngressClass`; the rendered
+AlbConfig must be applied explicitly first.
+
+See the
+[shared ALB runbook](platform/alicloud-alb/cluster/README.md)
+for rendering, validation, apply order, and teardown instructions.
 
 Only HTTP is configured for the short-lived assessment endpoint. A long-lived
 public service must add an HTTPS listener and managed certificate before
@@ -152,17 +161,20 @@ For each platform deployment:
 
 1. Apply Terraform for networking, ACS, RDS, and OSS resources.
 2. Ensure the ACR Personal namespace and repositories exist.
-3. Verify the ALB Ingress Controller and Metrics Server are available.
-4. Render and apply the shared `AlbConfig`.
-5. Wait for the ALB ID and DNS name, then apply the `IngressClass`.
-6. Create the target namespace.
-7. Create or update the namespace-local `portfolio-acr-pull` Secret.
-8. Create or update the `portfolio-database` Secret.
-9. Render a uniquely named migration Job with the API image digest.
-10. Create the Job and wait for the `Complete` condition.
-11. Stop the release and collect Job logs if migration fails.
-12. Render and apply the target overlay with immutable image digests.
-13. Wait for both Deployment rollouts and run HTTP smoke tests.
+3. Verify that Metrics Server is available and install the ALB Ingress Controller
+   in **Do not create** mode.
+4. Render the shared AlbConfig with `scripts/render-alb-config.sh`.
+5. Run a server-side dry-run, apply the rendered AlbConfig, and wait for its ALB
+   ID and DNS name.
+6. Apply the repository-owned `IngressClass` Kustomization.
+7. Create the target namespace.
+8. Create or update the namespace-local `portfolio-acr-pull` Secret.
+9. Create or update the `portfolio-database` Secret.
+10. Render a uniquely named migration Job with the API image digest.
+11. Create the Job and wait for the `Complete` condition.
+12. Stop the release and collect Job logs if migration fails.
+13. Render and apply the target overlay with immutable image digests.
+14. Wait for both Deployment rollouts and run HTTP smoke tests.
 
 Migrations are not init containers. This prevents concurrent migrations during
 Pod restarts, rolling updates, or HPA scale-out.

@@ -105,17 +105,47 @@ for environment in "${environments[@]}"; do
   printf 'validated environment: %s\n' "${environment}"
 done
 
-platform_render="${render_dir}/alicloud-alb.yaml"
+albconfig_render="${render_dir}/alicloud-albconfig.yaml"
+
+ALB_VSWITCH_ID_A='vsw-validationa' \
+  ALB_VSWITCH_ID_B='vsw-validationb' \
+  ALB_VSWITCH_ZONE_A='cn-shanghai-e' \
+  ALB_VSWITCH_ZONE_B='cn-shanghai-f' \
+  "${repo_root}/scripts/render-alb-config.sh" \
+  > "${albconfig_render}"
+
+require_count 1 '^kind: AlbConfig$' "${albconfig_render}"
+require_count 0 '\$\{[A-Z][A-Z0-9_]*\}' "${albconfig_render}"
+require_count 1 'vSwitchId: "vsw-validationa"$' "${albconfig_render}"
+require_count 1 'vSwitchId: "vsw-validationb"$' "${albconfig_render}"
+require_count 1 '^    edition: Standard$' "${albconfig_render}"
+
+if ALB_VSWITCH_ID_A='vsw-validationa' \
+  ALB_VSWITCH_ID_B='vsw-validationa' \
+  ALB_VSWITCH_ZONE_A='cn-shanghai-e' \
+  ALB_VSWITCH_ZONE_B='cn-shanghai-f' \
+  "${repo_root}/scripts/render-alb-config.sh" \
+  > /dev/null 2>&1; then
+  fail "ALB renderer accepted duplicate vSwitch IDs"
+fi
+
+if ALB_VSWITCH_ID_A='vsw-validationa' \
+  ALB_VSWITCH_ID_B='vsw-validationb' \
+  ALB_VSWITCH_ZONE_A='cn-shanghai-e' \
+  ALB_VSWITCH_ZONE_B='cn-shanghai-e' \
+  "${repo_root}/scripts/render-alb-config.sh" \
+  > /dev/null 2>&1; then
+  fail "ALB renderer accepted duplicate zones"
+fi
+
+ingress_class_render="${render_dir}/alicloud-ingress-class.yaml"
 
 kubectl kustomize \
   "${repo_root}/deploy/platform/alicloud-alb/cluster" \
-  > "${platform_render}"
+  > "${ingress_class_render}"
 
-require_count 1 '^kind: AlbConfig$' "${platform_render}"
-require_count 1 '^kind: IngressClass$' "${platform_render}"
-require_count 1 '\$\{ALB_VSWITCH_ID_A\}' "${platform_render}"
-require_count 1 '\$\{ALB_VSWITCH_ID_B\}' "${platform_render}"
-require_count 1 '^    edition: Standard$' "${platform_render}"
+require_count 0 '^kind: AlbConfig$' "${ingress_class_render}"
+require_count 1 '^kind: IngressClass$' "${ingress_class_render}"
 
 migration_render="${render_dir}/migration.yaml"
 
