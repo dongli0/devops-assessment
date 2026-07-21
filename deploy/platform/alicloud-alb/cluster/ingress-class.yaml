@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: alb-shared
+  labels:
+    app.kubernetes.io/name: portfolio-alb
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: portfolio
+spec:
+  controller: ingress.k8s.alibabacloud/alb
+  parameters:
+    apiGroup: alibabacloud.com
+    kind: AlbConfig
+    name: alb-shared
