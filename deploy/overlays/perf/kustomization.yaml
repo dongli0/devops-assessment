@@ -25,3 +25,7 @@ labels:
       environment: perf
     includeSelectors: false
     includeTemplates: true
+
+replicas:
+  - name: portfolio-web
+    count: 2

@@ -18,3 +18,9 @@ labels:
       environment: dev
     includeSelectors: false
     includeTemplates: true
+
+replicas:
+  - name: portfolio-api
+    count: 1
+  - name: portfolio-web
+    count: 1

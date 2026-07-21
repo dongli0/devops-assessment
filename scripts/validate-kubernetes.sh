@@ -38,26 +38,31 @@ environments=(dev test perf staging production)
 for environment in "${environments[@]}"; do
   case "${environment}" in
     dev | test)
-      expected_replicas=1
+      expected_replica_fields=2
+      expected_fixed_replicas=1
       expected_hpas=0
       expected_pdbs=0
       ;;
     perf)
-      expected_replicas=2
+      expected_replica_fields=1
+      expected_fixed_replicas=2
       expected_hpas=1
       expected_pdbs=0
       ;;
     staging)
-      expected_replicas=2
+      expected_replica_fields=1
+      expected_fixed_replicas=2
       expected_hpas=1
       expected_pdbs=2
       ;;
     production)
-      expected_replicas=2
+      expected_replica_fields=0
+      expected_fixed_replicas=0
       expected_hpas=2
       expected_pdbs=2
       ;;
   esac
+
 
   rendered="${render_dir}/${environment}.yaml"
 
@@ -77,7 +82,17 @@ for environment in "${environments[@]}"; do
   require_count "${expected_pdbs}" '^kind: PodDisruptionBudget$' "${rendered}"
 
   require_count 1 "^  name: portfolio-${environment}$" "${rendered}"
-  require_count 2 "^  replicas: ${expected_replicas}$" "${rendered}"
+
+  require_count \
+    "${expected_replica_fields}" \
+    '^  replicas: [0-9]+$' \
+    "${rendered}"
+
+  require_count \
+    "${expected_replica_fields}" \
+    "^  replicas: ${expected_fixed_replicas}$" \
+    "${rendered}"
+
   require_count 1 "^          value: ${environment}$" "${rendered}"
 
   require_count 2 "path: /${environment}/api/health/live$" "${rendered}"
