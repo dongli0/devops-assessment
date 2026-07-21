@@ -10,3 +10,8 @@ vswitches = {
     cidr_block = "10.20.16.0/20"
   }
 }
+
+kubernetes_service_cidr     = "172.21.0.0/20"
+kubernetes_version          = null
+cluster_api_public_access   = true
+cluster_deletion_protection = false
