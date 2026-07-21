@@ -12,6 +12,7 @@ It manages:
 - One GitHub Actions OIDC provider
 - One RAM role with an exact OIDC trust policy
 - One least-privilege policy for the platform state and lock table
+- One action-scoped policy for the current VPC, Security Group, ALB discovery, ACS, and RDS Terraform lifecycle
 
 It does not create the VPC, ACS cluster, RDS instance, ALB, or application workloads.
 
@@ -21,9 +22,26 @@ It does not create the VPC, ACS cluster, RDS instance, ALB, or application workl
 - Initial local authentication uses an interactive Alibaba Cloud CLI OAuth profile.
 - GitHub Actions later exchanges its OIDC token for temporary STS credentials.
 - OIDC subjects must be exact values and cannot contain wildcards.
-- The GitHub RAM role currently has backend access only. Platform deployment permissions are added separately.
+- Backend access and platform lifecycle access are managed by separate custom RAM policies.
+- No administrator, product FullAccess, billing, or general RAM permissions are attached to the GitHub role.
+- Some create and list APIs require `Resource = "*"`, so access is constrained through an explicit action allowlist and exact OIDC subjects.
+- ACS default and service-linked roles must be authorized interactively before the platform pipeline runs.
 - The initial bootstrap state is local because the remote backend does not exist yet.
 - The OSS bucket and Tablestore resources use `prevent_destroy`.
+
+## Platform Deployment Policy
+
+The platform policy is defined in `platform-policy.tf` and covers only the current Terraform lifecycle:
+
+- VPC and vSwitch management
+- ECS Security Group management
+- ALB availability-zone discovery
+- ACS cluster lifecycle management
+- RDS instance, database, account, and privilege management
+
+The ALB lifecycle is not granted directly to the GitHub role. The ALB ingress controller and the Alibaba Cloud service roles manage the shared ALB after the cluster is created.
+
+When the platform stack or Alicloud provider changes, review `AccessDenied` errors and update the explicit action allowlist. Do not resolve missing permissions by attaching administrator or product FullAccess policies.
 
 ## Code-Only Validation
 
@@ -210,7 +228,7 @@ Never enable `force_destroy` merely to bypass a failed deletion.
 - Terraform configuration: validated
 - Alibaba Cloud resources: not yet planned or applied
 - GitHub OIDC claim inspection workflow: pending
-- Platform deployment policy: pending
+- Platform deployment policy: implemented and locally validated; not applied
 - ACR Personal Edition initialization: pending
 
 ## References
