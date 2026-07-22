@@ -1,0 +1,92 @@
+name: Inspect GitHub OIDC Claims
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub Environment to inspect
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - perf
+          - staging
+          - production
+
+permissions:
+  id-token: write
+
+concurrency:
+  group: oidc-claims-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    name: Inspect OIDC claims / ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Request and inspect selected claims
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+        with:
+          script: |
+            const environment = process.env.TARGET_ENVIRONMENT;
+            const token = await core.getIDToken("sts.aliyuncs.com");
+
+            core.setSecret(token);
+
+            const segments = token.split(".");
+
+            if (segments.length !== 3) {
+              throw new Error("GitHub returned an invalid OIDC token");
+            }
+
+            const payload = JSON.parse(
+              Buffer.from(segments[1], "base64url").toString("utf8"),
+            );
+
+            const audience = Array.isArray(payload.aud)
+              ? payload.aud
+              : [payload.aud];
+
+            if (payload.iss !== "https://token.actions.githubusercontent.com") {
+              throw new Error("Unexpected OIDC issuer");
+            }
+
+            if (!audience.includes("sts.aliyuncs.com")) {
+              throw new Error("Unexpected OIDC audience");
+            }
+
+            if (typeof payload.sub !== "string") {
+              throw new Error("OIDC subject is missing");
+            }
+
+            const expectedSuffix = `:environment:${environment}`;
+
+            if (!payload.sub.endsWith(expectedSuffix)) {
+              throw new Error(
+                `OIDC subject does not target environment ${environment}`,
+              );
+            }
+
+            const rows = [
+              ["Claim", "Value"],
+              ["iss", `\`${payload.iss}\``],
+              ["aud", `\`${audience.join(", ")}\``],
+              ["sub", `\`${payload.sub}\``],
+            ];
+
+            await core.summary
+              .addHeading(`OIDC claims: ${environment}`)
+              .addTable(rows)
+              .addRaw(
+                "\nOnly selected claims are shown. The JWT is never written to logs.\n",
+              )
+              .write();

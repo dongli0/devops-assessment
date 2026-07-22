@@ -158,7 +158,20 @@ Do not permanently hard-code an unverified fingerprint copied from a blog or old
 
 Do not guess the subject claim.
 
-A diagnostic GitHub Actions workflow with `id-token: write` will be added with the pipeline code. It will print only selected claims such as `iss`, `aud`, and `sub`, never the complete token.
+The manually triggered `.github/workflows/oidc-claims.yaml` workflow requests a
+GitHub OIDC token for one protected environment and displays only the `iss`,
+`aud`, and `sub` claims in the workflow summary. It never prints or preserves
+the complete token.
+
+Create and protect the `dev`, `test`, `perf`, `staging`, and `production`
+GitHub Environments before running it. Run the workflow once for each
+environment and copy the reported `sub` value into the matching
+`github_deploy_oidc_subjects` entry.
+
+Configure every Environment to allow deployments only from `main`. Require
+manual approval for `perf`, `staging`, and `production`. These controls are
+required because an environment-based OIDC subject identifies the Environment,
+not the source branch that requested it.
 
 Depending on the repository configuration, the subject may resemble either:
 
@@ -317,7 +330,7 @@ Never enable `force_destroy` merely to bypass a failed deletion.
 
 - Terraform configuration: validated
 - Alibaba Cloud resources: not yet planned or applied
-- GitHub OIDC claim inspection workflow: pending
+- GitHub OIDC claim inspection workflow: implemented and locally validated; not run
 - Platform deployment policy: implemented and locally validated; not applied
 - Environment-specific service deployment roles: implemented and locally validated; not applied
 - Namespace-scoped ACS permission assignments: implemented and locally validated; not applied
