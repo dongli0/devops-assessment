@@ -6,7 +6,6 @@ namespace: portfolio-dev
 resources:
   - ../../base
   - ../../platform/alicloud-alb/ingress
-  - namespace.yaml
 
 patches:
   - path: api-environment-patch.yaml

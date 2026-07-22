@@ -6,7 +6,6 @@ namespace: portfolio-staging
 resources:
   - ../../base
   - ../../platform/alicloud-alb/ingress
-  - namespace.yaml
   - api-hpa.yaml
   - api-pdb.yaml
   - web-pdb.yaml

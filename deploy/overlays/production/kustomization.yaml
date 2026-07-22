@@ -6,7 +6,6 @@ namespace: portfolio-production
 resources:
   - ../../base
   - ../../platform/alicloud-alb/ingress
-  - namespace.yaml
   - api-hpa.yaml
   - web-hpa.yaml
   - api-pdb.yaml

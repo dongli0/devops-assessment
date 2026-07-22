@@ -69,6 +69,8 @@ for environment in "${environments[@]}"; do
     expected_replica_directives=1
   fi
 
+  expected_namespaced_resources=$((5 + expected_hpas + expected_pdbs))
+
   require_count \
     "${expected_replica_directives}" \
     '^replicas:$' \
@@ -84,7 +86,7 @@ for environment in "${environments[@]}"; do
     fail "${environment}: unresolved placeholder found"
   fi
 
-  require_count 1 '^kind: Namespace$' "${rendered}"
+  require_count 0 '^kind: Namespace$' "${rendered}"
   require_count 2 '^kind: Service$' "${rendered}"
   require_count 2 '^kind: Deployment$' "${rendered}"
   require_count 2 'name: portfolio-acr-pull$' "${rendered}"
@@ -92,7 +94,10 @@ for environment in "${environments[@]}"; do
   require_count "${expected_hpas}" '^kind: HorizontalPodAutoscaler$' "${rendered}"
   require_count "${expected_pdbs}" '^kind: PodDisruptionBudget$' "${rendered}"
 
-  require_count 1 "^  name: portfolio-${environment}$" "${rendered}"
+  require_count \
+    "${expected_namespaced_resources}" \
+    "^  namespace: portfolio-${environment}$" \
+    "${rendered}"
 
   require_count \
     "${expected_replica_fields}" \
@@ -114,6 +119,35 @@ for environment in "${environments[@]}"; do
 
   printf 'validated environment: %s\n' "${environment}"
 done
+
+service_access_render="${render_dir}/service-access.yaml"
+
+kubectl kustomize \
+  "${repo_root}/deploy/platform/service-access" \
+  > "${service_access_render}"
+
+require_count 5 '^kind: Namespace$' "${service_access_render}"
+require_count 1 '^kind: ClusterRole$' "${service_access_render}"
+require_count 1 '^  name: portfolio-service-deployer$' "${service_access_render}"
+require_count 0 '^kind: RoleBinding$' "${service_access_render}"
+require_count 0 '\*' "${service_access_render}"
+require_count \
+  0 \
+  '^  - (delete|deletecollection|update)$' \
+  "${service_access_render}"
+require_count \
+  0 \
+  '^  - pods/(exec|attach|portforward)$' \
+  "${service_access_render}"
+
+for environment in "${environments[@]}"; do
+  require_count \
+    1 \
+    "^  name: portfolio-${environment}$" \
+    "${service_access_render}"
+done
+
+printf 'validated platform service access\n'
 
 albconfig_render="${render_dir}/alicloud-albconfig.yaml"
 
@@ -194,7 +228,7 @@ require_count 1 '^  name: portfolio-migrate-validation-1$' "${release_migration}
 require_count 1 '^  namespace: portfolio-dev$' "${release_migration}"
 require_count 1 '@sha256:[0-9a-f]{64}$' "${release_migration}"
 
-require_count 1 '^kind: Namespace$' "${release_workloads}"
+require_count 0 '^kind: Namespace$' "${release_workloads}"
 require_count 2 '^kind: Deployment$' "${release_workloads}"
 require_count 2 '@sha256:[0-9a-f]{64}$' "${release_workloads}"
 require_count 0 'portfolio-(api|web):0\.1\.0' "${release_workloads}"
