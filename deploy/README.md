@@ -20,9 +20,10 @@ deploy/
 |   |-- staging/
 |   `-- production/
 `-- platform/
-    `-- alicloud-alb/
-        |-- cluster/              # Shared AlbConfig and IngressClass
-        `-- ingress/              # Reusable namespaced Ingress template
+    |-- alicloud-alb/
+    |   |-- cluster/              # Shared AlbConfig and IngressClass
+    |   `-- ingress/              # Reusable namespaced Ingress template
+    `-- service-access/           # Platform-owned namespaces and deploy RBAC
 ```
 
 ## Environment Policy
@@ -78,8 +79,15 @@ interface:
 
 ACR Personal instances created on or after September 9, 2024 do not support the
 credential helper or the `GetAuthorizationToken` API. The delivery pipeline
-therefore creates this namespace-scoped Secret from protected GitHub
-Environment credentials belonging to a read-only RAM user.
+therefore uses a fixed registry password, and only one RAM user can set that
+password.
+
+For this assessment, one dedicated RAM user has repository-scoped pull and push
+permissions only for `portfolio-api` and `portfolio-web`. Its fixed credentials
+are stored in protected GitHub Environments and are also used to bootstrap the
+namespace-local pull Secrets. Consequently, those pull Secrets technically
+carry push capability. This is an accepted ACR Personal limitation for the
+assessment and is not a production security design.
 
 The fixed registry password and rendered Secret must never enter Git. The
 registry server must exactly match the image host, such as
@@ -106,6 +114,36 @@ database password is committed to Git.
 The API Deployment and migration Job both consume this interface. A production
 reference implementation should use separate runtime and migration database
 roles; this assessment uses one account to keep the platform small.
+
+## Access and Ownership
+
+Alibaba Cloud RAM authorization and Kubernetes RBAC are separate controls. RAM
+allows a workflow to assume an environment-specific role and request a
+15-minute cluster kubeconfig. ACS then maps that RAM role to the custom
+`portfolio-service-deployer` role in exactly one namespace.
+
+| Resource                                                        | Owner                  | Service delivery access |
+| --------------------------------------------------------------- | ---------------------- | ----------------------- |
+| Five namespaces and Pod Security labels                         | Platform administrator | None                    |
+| `portfolio-service-deployer` ClusterRole                        | Platform administrator | None                    |
+| ACS namespace permission assignments                            | Bootstrap Terraform    | None                    |
+| `AlbConfig` and `IngressClass`                                  | Platform administrator | None                    |
+| Secrets, Services, Deployments, Jobs, Ingresses, HPAs, and PDBs | Environment release    | Matching namespace only |
+
+The platform administrator applies `deploy/platform/service-access` before
+Terraform enables the five service deployment identities. The daily service
+pipeline does not own Namespace or other cluster-scoped resources and must
+never use `cluster-admin`.
+
+Each protected GitHub Environment has its own Alibaba Cloud RAM role:
+
+| GitHub Environment | Kubernetes namespace   |
+| ------------------ | ---------------------- |
+| `dev`              | `portfolio-dev`        |
+| `test`             | `portfolio-test`       |
+| `perf`             | `portfolio-perf`       |
+| `staging`          | `portfolio-staging`    |
+| `production`       | `portfolio-production` |
 
 ## Workload Security
 
@@ -153,28 +191,52 @@ Run all local Kubernetes checks without contacting a cluster:
 ```
 
 The script renders all five overlays, verifies environment-specific paths and
-policies, and checks the ALB and migration templates.
+policies, validates the platform service-access resources, tests immutable
+release rendering, and checks the ALB and migration templates.
 
 ## Deployment Order
 
-For each platform deployment:
+Perform the platform and access bootstrap once:
 
-1. Apply Terraform for networking, ACS, and RDS resources.
-2. Ensure the ACR Personal namespace and repositories exist.
-3. Verify that Metrics Server is available and install the ALB Ingress Controller
-   in **Do not create** mode.
-4. Render the shared AlbConfig with `scripts/render-alb-config.sh`.
-5. Run a server-side dry-run, apply the rendered AlbConfig, and wait for its ALB
+1. Apply the initial bootstrap stack without the optional service deployment
+   identity inputs.
+2. Apply Terraform for networking, ACS, and RDS resources.
+3. Verify that Metrics Server is available and install the ALB Ingress
+   Controller in **Do not create** mode.
+4. With platform or cluster-administrator credentials, apply
+   `deploy/platform/service-access`.
+5. Finalize the bootstrap stack with the ACS cluster ID and the five exact
+   GitHub Environment OIDC subjects. This creates one namespace-scoped RAM role
+   assignment per environment.
+6. Ensure the ACR Personal namespace and repositories exist.
+7. Render the shared AlbConfig with `scripts/render-alb-config.sh`.
+8. Run a server-side dry-run, apply the rendered AlbConfig, and wait for its ALB
    ID and DNS name.
-6. Apply the repository-owned `IngressClass` Kustomization.
-7. Create the target namespace.
-8. Create or update the namespace-local `portfolio-acr-pull` Secret.
-9. Create or update the `portfolio-database` Secret.
-10. Render a uniquely named migration Job with the API image digest.
-11. Create the Job and wait for the `Complete` condition.
-12. Stop the release and collect Job logs if migration fails.
-13. Render and apply the target overlay with immutable image digests.
-14. Wait for both Deployment rollouts and run HTTP smoke tests.
+9. Apply the repository-owned `IngressClass` Kustomization.
+
+For each service release:
+
+1. Assume only the RAM role stored in the target protected GitHub Environment
+   and request its 15-minute kubeconfig.
+2. Create or patch the namespace-local `portfolio-acr-pull` Secret.
+3. Create or patch the namespace-local `portfolio-database` Secret.
+4. Render a uniquely named migration Job with the API image digest.
+5. Create the Job and wait for the `Complete` condition.
+6. Stop the release and collect Job logs if migration fails.
+7. Render and apply the target overlay with immutable image digests.
+8. Wait for both Deployment rollouts and run HTTP smoke tests.
+
+The workload manifest is owned by the
+`portfolio-service-delivery` server-side apply field manager. The pipeline uses
+`--force-conflicts` for both server-side dry-run and apply so that this single
+desired-state owner can reclaim Deployment template fields changed by
+`kubectl rollout undo`.
+
+Before applying workloads, the pipeline records each Deployment revision and a
+canonical SHA-256 hash of its Pod template. If apply, rollout, or smoke testing
+fails, only a Deployment whose Pod template changed is rolled back to its exact
+previous revision. HPA-only replica changes therefore do not trigger a false
+rollback.
 
 Migrations are not init containers. This prevents concurrent migrations during
 Pod restarts, rolling updates, or HPA scale-out.
@@ -183,12 +245,20 @@ Pod restarts, rolling updates, or HPA scale-out.
 
 To avoid leaving billable cloud resources behind:
 
-1. Delete the five namespaced Ingress resources.
+1. With platform or cluster-administrator credentials, delete the five
+   namespaced Ingress resources.
 2. Wait for ALB forwarding rules and server groups to be removed.
-3. Delete the environment workloads and namespaces.
-4. Delete the `IngressClass`.
-5. Delete the `AlbConfig` and confirm that the ALB is gone.
-6. Run Terraform destroy and check the Alibaba Cloud console for leftovers.
+3. Delete the remaining environment workloads and Secrets.
+4. Update the bootstrap stack to remove the ACS namespace permission
+   assignments and the five service deployment RAM roles.
+5. Delete the `IngressClass`, then delete the `AlbConfig` and confirm that the
+   ALB is gone.
+6. Delete `deploy/platform/service-access`, including the five namespaces and
+   custom ClusterRole.
+7. Run the platform Terraform destroy and check the Alibaba Cloud console for
+   leftovers.
+8. Retain the bootstrap state until its protected OSS state and lock resources
+   are deliberately removed according to the bootstrap runbook.
 
 The infrastructure ADR documents the cost and isolation trade-offs in more
 detail.

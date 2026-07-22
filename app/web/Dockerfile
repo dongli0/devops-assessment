@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.8.1
 
 FROM nginxinc/nginx-unprivileged:1.30.3-alpine
 

@@ -10,9 +10,11 @@ It manages:
 - OSS versioning and AES256 server-side encryption
 - One Tablestore Capacity instance and lock table
 - One GitHub Actions OIDC provider
-- One RAM role with an exact OIDC trust policy
+- One platform Terraform RAM role with an exact OIDC trust policy
+- Five optional environment-specific service deployment RAM roles
 - One least-privilege policy for the platform state and lock table
 - One action-scoped policy for the current VPC, Security Group, ALB discovery, ACS, and RDS Terraform lifecycle
+- Namespace-scoped ACS permission assignments for the service deployment roles
 
 It does not create the VPC, ACS cluster, RDS instance, ALB, or application workloads.
 
@@ -23,9 +25,12 @@ It does not create the VPC, ACS cluster, RDS instance, ALB, or application workl
 - GitHub Actions later exchanges its OIDC token for temporary STS credentials.
 - OIDC subjects must be exact values and cannot contain wildcards.
 - Backend access and platform lifecycle access are managed by separate custom RAM policies.
-- No administrator, product FullAccess, billing, or general RAM permissions are attached to the GitHub role.
+- Service delivery uses one RAM role per environment so that a non-production workflow cannot assume the production role.
+- Each service deployment role receives a 15-minute kubeconfig and access to exactly one Kubernetes namespace.
+- No administrator, product FullAccess, billing, general RAM, or `cluster-admin` permissions are attached to any GitHub role.
 - Some create and list APIs require `Resource = "*"`, so access is constrained through an explicit action allowlist and exact OIDC subjects.
 - ACS default and service-linked roles must be authorized interactively before the platform pipeline runs.
+- The bootstrap caller must be authorized to manage ACS user permissions; that capability is never delegated to service workflows.
 - The initial bootstrap state is local because the remote backend does not exist yet.
 - The OSS bucket and Tablestore resources use `prevent_destroy`.
 
@@ -42,6 +47,36 @@ The platform policy is defined in `platform-policy.tf` and covers only the curre
 The ALB lifecycle is not granted directly to the GitHub role. The ALB ingress controller and the Alibaba Cloud service roles manage the shared ALB after the cluster is created.
 
 When the platform stack or Alicloud provider changes, review `AccessDenied` errors and update the explicit action allowlist. Do not resolve missing permissions by attaching administrator or product FullAccess policies.
+
+## Service Deployment Identities
+
+Service deployment identities are enabled only after the ACS cluster and its
+platform-owned Kubernetes access resources exist.
+
+`github_deploy_oidc_subjects` must contain exactly these five keys:
+
+| Key          | RAM role suffix            | Authorized namespace   |
+| ------------ | -------------------------- | ---------------------- |
+| `dev`        | `github-deploy-dev`        | `portfolio-dev`        |
+| `test`       | `github-deploy-test`       | `portfolio-test`       |
+| `perf`       | `github-deploy-perf`       | `portfolio-perf`       |
+| `staging`    | `github-deploy-staging`    | `portfolio-staging`    |
+| `production` | `github-deploy-production` | `portfolio-production` |
+
+Terraform creates one RAM role per entry. Each trust policy accepts only the
+exact OIDC subject of its matching protected GitHub Environment. Wildcards and
+branch-only subjects are rejected for these roles.
+
+The shared RAM policy allows only the cluster reads needed to obtain a
+15-minute kubeconfig. `alicloud_cs_kubernetes_permissions` assigns the custom
+`portfolio-service-deployer` role to exactly one namespace for each RAM role.
+The service roles cannot create namespaces or deploy across environments.
+
+The custom role and namespaces are owned by
+[`deploy/platform/service-access`](../../deploy/platform/service-access). Apply
+that Kustomization with platform or cluster-administrator credentials before
+enabling the Terraform service deployment identities. The service delivery
+pipeline must never apply these platform resources itself.
 
 ## Code-Only Validation
 
@@ -89,12 +124,21 @@ cp \
 chmod 600 infra/bootstrap/terraform.tfvars
 ```
 
-Configure:
+For the initial bootstrap apply, configure:
 
 - `state_bucket_name`: globally unique OSS bucket name
 - `lock_instance_name`: unique Tablestore instance name with 3-16 characters
 - `github_oidc_fingerprints`: current GitHub OIDC HTTPS CA fingerprints
-- `github_oidc_subjects`: exact subject claims permitted to assume the role
+- `github_oidc_subjects`: exact subject claims permitted to assume the platform Terraform role
+
+Leave `deployment_cluster_id` as `null` and
+`github_deploy_oidc_subjects` empty during the initial bootstrap apply.
+
+After the platform cluster and service-access resources exist, configure both
+of these inputs together:
+
+- `deployment_cluster_id`: ACS cluster ID returned by the platform stack
+- `github_deploy_oidc_subjects`: exact OIDC subject for each of the five protected GitHub Environments
 
 The real `terraform.tfvars` file is ignored by Git.
 
@@ -114,7 +158,20 @@ Do not permanently hard-code an unverified fingerprint copied from a blog or old
 
 Do not guess the subject claim.
 
-A diagnostic GitHub Actions workflow with `id-token: write` will be added with the pipeline code. It will print only selected claims such as `iss`, `aud`, and `sub`, never the complete token.
+The manually triggered `.github/workflows/oidc-claims.yaml` workflow requests a
+GitHub OIDC token for one protected environment and displays only the `iss`,
+`aud`, and `sub` claims in the workflow summary. It never prints or preserves
+the complete token.
+
+Create and protect the `dev`, `test`, `perf`, `staging`, and `production`
+GitHub Environments before running it. Run the workflow once for each
+environment and copy the reported `sub` value into the matching
+`github_deploy_oidc_subjects` entry.
+
+Configure every Environment to allow deployments only from `main`. Require
+manual approval for `perf`, `staging`, and `production`. These controls are
+required because an environment-based OIDC subject identifies the Environment,
+not the source branch that requested it.
 
 Depending on the repository configuration, the subject may resemble either:
 
@@ -124,7 +181,10 @@ repo:OWNER/REPOSITORY:ref:refs/heads/main
 
 or an immutable subject containing numeric owner and repository IDs.
 
-Copy only the actual value returned by GitHub into `github_oidc_subjects`.
+Copy only actual values returned by GitHub. Put the platform workflow subject
+in `github_oidc_subjects`. Put each service workflow subject in the matching
+key of `github_deploy_oidc_subjects`; for example, the `dev` value must end in
+`:environment:dev`.
 
 ## Interactive OAuth Authentication
 
@@ -219,12 +279,31 @@ terraform -chdir=infra/platform validate
 
 The real `backend.hcl` file is ignored by Git.
 
+## Finalize Service Deployment Access
+
+The bootstrap root is intentionally applied in two phases:
+
+1. Apply bootstrap without the optional service deployment inputs.
+2. Apply the platform stack and obtain its `cluster_id` output.
+3. With platform or cluster-administrator credentials, apply
+   `deploy/platform/service-access` to create the five namespaces and the
+   custom `portfolio-service-deployer` ClusterRole.
+4. Record the exact OIDC subject emitted for each protected GitHub Environment.
+5. Set `deployment_cluster_id` and all five entries in
+   `github_deploy_oidc_subjects`.
+6. Review and apply a second bootstrap plan to create the five RAM roles and
+   their namespace-scoped ACS permission assignments.
+
+Do not run the second apply before the custom Kubernetes role exists. Do not
+replace the custom role with `cluster-admin` to bypass an authorization error.
+
 ## GitHub Repository Configuration
 
 After bootstrap, record these outputs as GitHub repository or environment variables:
 
 - `github_oidc_provider_arn` as `ALIBABA_CLOUD_OIDC_PROVIDER_ARN`
 - `github_terraform_role_arn` as `ALIBABA_CLOUD_ROLE_ARN`
+- Each entry of `github_deploy_role_arns` as `ALIBABA_CLOUD_DEPLOY_ROLE_ARN` in its matching protected GitHub Environment
 - Region as `ALIBABA_CLOUD_REGION`
 
 No Alibaba Cloud AccessKey should be added to GitHub.
@@ -251,8 +330,11 @@ Never enable `force_destroy` merely to bypass a failed deletion.
 
 - Terraform configuration: validated
 - Alibaba Cloud resources: not yet planned or applied
-- GitHub OIDC claim inspection workflow: pending
+- GitHub OIDC claim inspection workflow: implemented and locally validated; not run
 - Platform deployment policy: implemented and locally validated; not applied
+- Environment-specific service deployment roles: implemented and locally validated; not applied
+- Namespace-scoped ACS permission assignments: implemented and locally validated; not applied
+- Platform-owned namespaces and custom deployment role: implemented as Kubernetes manifests; not applied
 - ACR Personal Edition initialization: pending
 
 ## References

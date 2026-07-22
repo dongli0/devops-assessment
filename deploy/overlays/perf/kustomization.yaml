@@ -6,18 +6,11 @@ namespace: portfolio-perf
 resources:
   - ../../base
   - ../../platform/alicloud-alb/ingress
-  - namespace.yaml
   - api-hpa.yaml
 
 patches:
   - path: api-environment-patch.yaml
   - path: ingress-path-patch.yaml
-
-replicas:
-  - name: portfolio-api
-    count: 2
-  - name: portfolio-web
-    count: 2
 
 labels:
   - pairs:

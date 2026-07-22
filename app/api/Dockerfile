@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.8.1
 
 FROM python:3.13-slim-bookworm AS builder
 

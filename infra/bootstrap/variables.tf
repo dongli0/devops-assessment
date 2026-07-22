@@ -84,3 +84,52 @@ variable "github_oidc_subjects" {
     error_message = "Provide exact repo-scoped OIDC subjects without wildcards."
   }
 }
+
+variable "deployment_cluster_id" {
+  description = "ACS cluster ID authorized for service deployment after platform apply."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.deployment_cluster_id == null ?
+      true :
+      can(regex("^[A-Za-z0-9][A-Za-z0-9-]{7,127}$", var.deployment_cluster_id))
+    )
+    error_message = "deployment_cluster_id must be null or a valid ACS cluster ID."
+  }
+}
+
+variable "github_deploy_oidc_subjects" {
+  description = "Exact GitHub Environment OIDC subject for each service environment."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition = (
+      (
+        var.deployment_cluster_id == null &&
+        length(var.github_deploy_oidc_subjects) == 0
+      ) ||
+      (
+        var.deployment_cluster_id != null &&
+        length(var.github_deploy_oidc_subjects) == 5 &&
+        alltrue([
+          for environment in keys(var.github_deploy_oidc_subjects) :
+          contains(
+            ["dev", "test", "perf", "staging", "production"],
+            environment,
+          )
+        ]) &&
+        alltrue([
+          for environment, subject in var.github_deploy_oidc_subjects :
+          startswith(subject, "repo:") &&
+          endswith(subject, ":environment:${environment}") &&
+          !strcontains(subject, "*")
+        ])
+      )
+    )
+    error_message = "Configure exactly one wildcard-free Environment subject for each of dev, test, perf, staging, and production together with deployment_cluster_id."
+  }
+}

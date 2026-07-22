@@ -63,6 +63,18 @@ for environment in "${environments[@]}"; do
       ;;
   esac
 
+  if [[ "${environment}" == "production" ]]; then
+    expected_replica_directives=0
+  else
+    expected_replica_directives=1
+  fi
+
+  expected_namespaced_resources=$((5 + expected_hpas + expected_pdbs))
+
+  require_count \
+    "${expected_replica_directives}" \
+    '^replicas:$' \
+    "${repo_root}/deploy/overlays/${environment}/kustomization.yaml"
 
   rendered="${render_dir}/${environment}.yaml"
 
@@ -74,7 +86,7 @@ for environment in "${environments[@]}"; do
     fail "${environment}: unresolved placeholder found"
   fi
 
-  require_count 1 '^kind: Namespace$' "${rendered}"
+  require_count 0 '^kind: Namespace$' "${rendered}"
   require_count 2 '^kind: Service$' "${rendered}"
   require_count 2 '^kind: Deployment$' "${rendered}"
   require_count 2 'name: portfolio-acr-pull$' "${rendered}"
@@ -82,7 +94,10 @@ for environment in "${environments[@]}"; do
   require_count "${expected_hpas}" '^kind: HorizontalPodAutoscaler$' "${rendered}"
   require_count "${expected_pdbs}" '^kind: PodDisruptionBudget$' "${rendered}"
 
-  require_count 1 "^  name: portfolio-${environment}$" "${rendered}"
+  require_count \
+    "${expected_namespaced_resources}" \
+    "^  namespace: portfolio-${environment}$" \
+    "${rendered}"
 
   require_count \
     "${expected_replica_fields}" \
@@ -104,6 +119,35 @@ for environment in "${environments[@]}"; do
 
   printf 'validated environment: %s\n' "${environment}"
 done
+
+service_access_render="${render_dir}/service-access.yaml"
+
+kubectl kustomize \
+  "${repo_root}/deploy/platform/service-access" \
+  > "${service_access_render}"
+
+require_count 5 '^kind: Namespace$' "${service_access_render}"
+require_count 1 '^kind: ClusterRole$' "${service_access_render}"
+require_count 1 '^  name: portfolio-service-deployer$' "${service_access_render}"
+require_count 0 '^kind: RoleBinding$' "${service_access_render}"
+require_count 0 '\*' "${service_access_render}"
+require_count \
+  0 \
+  '^  - (delete|deletecollection|update)$' \
+  "${service_access_render}"
+require_count \
+  0 \
+  '^  - pods/(exec|attach|portforward)$' \
+  "${service_access_render}"
+
+for environment in "${environments[@]}"; do
+  require_count \
+    1 \
+    "^  name: portfolio-${environment}$" \
+    "${service_access_render}"
+done
+
+printf 'validated platform service access\n'
 
 albconfig_render="${render_dir}/alicloud-albconfig.yaml"
 
@@ -161,6 +205,82 @@ require_count 1 '\$\{PORTFOLIO_API_IMAGE\}' "${migration_render}"
 require_count 5 '\$\{PORTFOLIO_ENVIRONMENT\}' "${migration_render}"
 require_count 1 'name: portfolio-database$' "${migration_render}"
 require_count 1 'key: database-url$' "${migration_render}"
+
+release_digest="sha256:$(printf 'a%.0s' {1..64})"
+release_registry="crpi-validation-vpc.cn-shanghai.personal.cr.aliyuncs.com/portfolio"
+release_api_image="${release_registry}/portfolio-api@${release_digest}"
+release_web_image="${release_registry}/portfolio-web@${release_digest}"
+release_output="${render_dir}/service-release-valid"
+
+"${repo_root}/scripts/render-service-release.sh" \
+  dev \
+  "${release_api_image}" \
+  "${release_web_image}" \
+  validation-1 \
+  "${release_output}" \
+  > /dev/null
+
+release_migration="${release_output}/migration.yaml"
+release_workloads="${release_output}/workloads.yaml"
+
+require_count 1 '^kind: Job$' "${release_migration}"
+require_count 1 '^  name: portfolio-migrate-validation-1$' "${release_migration}"
+require_count 1 '^  namespace: portfolio-dev$' "${release_migration}"
+require_count 1 '@sha256:[0-9a-f]{64}$' "${release_migration}"
+
+require_count 0 '^kind: Namespace$' "${release_workloads}"
+require_count 2 '^kind: Deployment$' "${release_workloads}"
+require_count 2 '@sha256:[0-9a-f]{64}$' "${release_workloads}"
+require_count 0 'portfolio-(api|web):0\.1\.0' "${release_workloads}"
+require_count 0 '\$\{[A-Z][A-Z0-9_]*\}' "${release_migration}"
+require_count 0 '\$\{[A-Z][A-Z0-9_]*\}' "${release_workloads}"
+
+mutable_output="${render_dir}/service-release-mutable"
+
+if "${repo_root}/scripts/render-service-release.sh" \
+  dev \
+  "${release_registry}/portfolio-api:latest" \
+  "${release_web_image}" \
+  invalid-tag \
+  "${mutable_output}" \
+  > /dev/null 2>&1; then
+  fail "service release renderer accepted a mutable image tag"
+fi
+
+environment_output="${render_dir}/service-release-environment"
+
+if "${repo_root}/scripts/render-service-release.sh" \
+  qa \
+  "${release_api_image}" \
+  "${release_web_image}" \
+  invalid-environment \
+  "${environment_output}" \
+  > /dev/null 2>&1; then
+  fail "service release renderer accepted an unsupported environment"
+fi
+
+location_output="${render_dir}/service-release-location"
+mismatched_web_image="crpi-validation-vpc.cn-shanghai.personal.cr.aliyuncs.com/other/portfolio-web@${release_digest}"
+
+if "${repo_root}/scripts/render-service-release.sh" \
+  dev \
+  "${release_api_image}" \
+  "${mismatched_web_image}" \
+  mismatched-location \
+  "${location_output}" \
+  > /dev/null 2>&1; then
+  fail "service release renderer accepted mismatched image locations"
+fi
+
+for rejected_output in \
+  "${mutable_output}" \
+  "${environment_output}" \
+  "${location_output}"; do
+  [[ ! -e "${rejected_output}" ]] ||
+    fail "failed render left output behind: ${rejected_output}"
+done
+
+printf 'validated immutable service release renderer\n'
 
 printf 'validated platform and migration templates\n'
 printf 'Kubernetes manifest validation passed\n'

@@ -1,0 +1,534 @@
+name: Deploy Service Environment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Target deployment environment
+        required: true
+        type: string
+      source_sha:
+        description: Trusted source commit
+        required: true
+        type: string
+      api_image:
+        description: Immutable API image reference
+        required: true
+        type: string
+      web_image:
+        description: Immutable Web image reference
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  validate-release:
+    name: Validate release contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+
+    outputs:
+      environment: ${{ steps.validate.outputs.environment }}
+      source_sha: ${{ steps.validate.outputs.source_sha }}
+      api_image: ${{ steps.validate.outputs.api_image }}
+      web_image: ${{ steps.validate.outputs.web_image }}
+
+    steps:
+      - name: Validate release inputs
+        id: validate
+        shell: bash
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          API_IMAGE: ${{ inputs.api_image }}
+          WEB_IMAGE: ${{ inputs.web_image }}
+          ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}
+          ACR_NAMESPACE: ${{ vars.ACR_NAMESPACE }}
+          TRIGGER_EVENT: ${{ github.event_name }}
+          CALLER_REF: ${{ github.ref }}
+          CALLER_SHA: ${{ github.sha }}
+          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
+          WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -Eeuo pipefail
+
+          case "${TARGET_ENVIRONMENT}" in
+            dev | test | perf | staging | production) ;;
+            *)
+              printf \
+                'unsupported deployment environment: %s\n' \
+                "${TARGET_ENVIRONMENT}" \
+                >&2
+              exit 1
+              ;;
+          esac
+
+          [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+
+          case "${TRIGGER_EVENT}" in
+            workflow_run)
+              [[ "${WORKFLOW_RUN_EVENT}" == "push" ]]
+              [[ "${WORKFLOW_RUN_CONCLUSION}" == "success" ]]
+              [[ "${WORKFLOW_RUN_HEAD_BRANCH}" == "main" ]]
+              [[ "${SOURCE_SHA}" == "${WORKFLOW_RUN_HEAD_SHA}" ]]
+              ;;
+            workflow_dispatch)
+              [[ "${CALLER_REF}" == "refs/heads/main" ]]
+              [[ "${SOURCE_SHA}" == "${CALLER_SHA}" ]]
+              ;;
+            *)
+              printf 'unsupported caller event\n' >&2
+              exit 1
+              ;;
+          esac
+
+          registry_pattern='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.aliyuncs\.com$'
+
+          [[ -n "${ACR_REGISTRY}" ]]
+          [[ "${ACR_REGISTRY}" != *"://"* ]]
+          [[ "${ACR_REGISTRY}" != */* ]]
+          [[ "${ACR_REGISTRY}" =~ ${registry_pattern} ]]
+
+          [[ "${ACR_NAMESPACE}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]]
+
+          api_prefix="${ACR_REGISTRY}/${ACR_NAMESPACE}/"
+          api_prefix+="portfolio-api@sha256:"
+
+          web_prefix="${ACR_REGISTRY}/${ACR_NAMESPACE}/"
+          web_prefix+="portfolio-web@sha256:"
+
+          [[ "${API_IMAGE}" == "${api_prefix}"* ]]
+          [[ "${WEB_IMAGE}" == "${web_prefix}"* ]]
+
+          api_digest="${API_IMAGE#"${api_prefix}"}"
+          web_digest="${WEB_IMAGE#"${web_prefix}"}"
+
+          [[ "${api_digest}" =~ ^[0-9a-f]{64}$ ]]
+          [[ "${web_digest}" =~ ^[0-9a-f]{64}$ ]]
+
+          {
+            printf 'environment=%s\n' "${TARGET_ENVIRONMENT}"
+            printf 'source_sha=%s\n' "${SOURCE_SHA}"
+            printf 'api_image=%s\n' "${API_IMAGE}"
+            printf 'web_image=%s\n' "${WEB_IMAGE}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Check out trusted source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.validate.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Verify checked-out source revision
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ steps.validate.outputs.source_sha }}
+        run: |
+          set -Eeuo pipefail
+
+          actual_source_sha="$(git rev-parse HEAD)"
+          [[ "${actual_source_sha}" == "${EXPECTED_SOURCE_SHA}" ]]
+
+  deploy:
+    name: Deploy / ${{ needs.validate-release.outputs.environment }}
+    needs:
+      - validate-release
+    environment:
+      name: ${{ needs.validate-release.outputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    concurrency:
+      group: service-deploy-${{ needs.validate-release.outputs.environment }}
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      ALIBABA_CLOUD_REGION_ID: ${{ vars.ALIBABA_CLOUD_REGION }}
+      ALIBABA_CLOUD_IGNORE_PROFILE: "TRUE"
+
+    steps:
+      - name: Check out trusted source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Validate deployment configuration
+        shell: bash
+        env:
+          TARGET_ENVIRONMENT: ${{ needs.validate-release.outputs.environment }}
+          CLUSTER_ID: ${{ vars.ALIBABA_CLOUD_CLUSTER_ID }}
+          OIDC_PROVIDER_ARN: ${{ vars.ALIBABA_CLOUD_OIDC_PROVIDER_ARN }}
+          DEPLOY_ROLE_ARN: ${{ vars.ALIBABA_CLOUD_DEPLOY_ROLE_ARN }}
+          ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}
+          ACR_NAMESPACE: ${{ vars.ACR_NAMESPACE }}
+          ACR_USERNAME: ${{ vars.ACR_USERNAME }}
+        run: |
+          set -Eeuo pipefail
+
+          ./scripts/service-deploy-preflight.sh \
+            validate-config \
+            "${TARGET_ENVIRONMENT}" \
+            "${ALIBABA_CLOUD_REGION_ID}" \
+            "${CLUSTER_ID}" \
+            "${OIDC_PROVIDER_ARN}" \
+            "${DEPLOY_ROLE_ARN}" \
+            "${ACR_REGISTRY}" \
+            "${ACR_NAMESPACE}" \
+            "${ACR_USERNAME}"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
+        with:
+          version: v1.34.2
+
+      - name: Validate local deployment tools
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          for command_name in curl envsubst jq sha256sum tar; do
+            command -v "${command_name}" >/dev/null 2>&1 || {
+              printf \
+                'required command not found: %s\n' \
+                "${command_name}" \
+                >&2
+              exit 1
+            }
+          done
+
+      - name: Install verified Alibaba Cloud CLI
+        shell: bash
+        env:
+          ALIYUN_CLI_VERSION: "3.3.18"
+          ALIYUN_CLI_SHA256: "0823286604dbd8beb8d65dd0694d23c913e7c5d5a02b20a3593a4f8a6517f1d4"
+        run: |
+          set -Eeuo pipefail
+
+          archive="${RUNNER_TEMP}/aliyun-cli.tgz"
+          tool_directory="${RUNNER_TEMP}/aliyun-cli"
+          download_url="https://github.com/aliyun/aliyun-cli/releases/"
+          download_url+="download/v${ALIYUN_CLI_VERSION}/"
+          download_url+="aliyun-cli-linux-${ALIYUN_CLI_VERSION}-amd64.tgz"
+
+          mkdir -- "${tool_directory}"
+
+          curl \
+            --proto '=https' \
+            --tlsv1.2 \
+            --fail \
+            --location \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-all-errors \
+            --output "${archive}" \
+            "${download_url}"
+
+          actual_checksum="$(
+            sha256sum "${archive}" |
+              awk '{print $1}'
+          )"
+
+          [[ "${actual_checksum}" == "${ALIYUN_CLI_SHA256}" ]]
+
+          tar \
+            --extract \
+            --gzip \
+            --file "${archive}" \
+            --directory "${tool_directory}" \
+            --no-same-owner \
+            --no-same-permissions \
+            aliyun
+
+          chmod 0755 "${tool_directory}/aliyun"
+          rm -f -- "${archive}"
+
+          installed_version="$("${tool_directory}/aliyun" version)"
+          [[ "${installed_version}" == *"${ALIYUN_CLI_VERSION}"* ]]
+
+          printf '%s\n' "${tool_directory}" >> "${GITHUB_PATH}"
+
+      - name: Render immutable service release
+        id: render
+        shell: bash
+        env:
+          TARGET_ENVIRONMENT: ${{ needs.validate-release.outputs.environment }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+          API_IMAGE: ${{ needs.validate-release.outputs.api_image }}
+          WEB_IMAGE: ${{ needs.validate-release.outputs.web_image }}
+        run: |
+          set -Eeuo pipefail
+
+          release_directory="${RUNNER_TEMP}/service-release-${TARGET_ENVIRONMENT}"
+          deployment_id="r${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-"
+          deployment_id+="${SOURCE_SHA:0:8}"
+
+          ./scripts/render-service-release.sh \
+            "${TARGET_ENVIRONMENT}" \
+            "${API_IMAGE}" \
+            "${WEB_IMAGE}" \
+            "${deployment_id}" \
+            "${release_directory}"
+
+          {
+            printf 'release_directory=%s\n' "${release_directory}"
+            printf 'deployment_id=%s\n' "${deployment_id}"
+            printf \
+              'migration_job=portfolio-migrate-%s\n' \
+              "${deployment_id}"
+            printf \
+              'namespace=portfolio-%s\n' \
+              "${TARGET_ENVIRONMENT}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Configure temporary Alibaba Cloud credentials
+        uses: aliyun/configure-aliyun-credentials-action@1e5248c8d5d93a8781ac344a68e19a43341e79e6 # v1.1.0
+        with:
+          oidc-provider-arn: ${{ vars.ALIBABA_CLOUD_OIDC_PROVIDER_ARN }}
+          role-to-assume: ${{ vars.ALIBABA_CLOUD_DEPLOY_ROLE_ARN }}
+          role-session-name: >-
+            gha-service-${{ needs.validate-release.outputs.environment }}-${{ github.run_id }}
+          role-session-expiration: "1800"
+          audience: sts.aliyuncs.com
+
+      - name: Request temporary ACS kubeconfig
+        shell: bash
+        env:
+          CLUSTER_ID: ${{ vars.ALIBABA_CLOUD_CLUSTER_ID }}
+          TARGET_ENVIRONMENT: ${{ needs.validate-release.outputs.environment }}
+        run: |
+          set -Eeuo pipefail
+
+          kubeconfig_path="${RUNNER_TEMP}/kubeconfig-${TARGET_ENVIRONMENT}"
+
+          ./scripts/write-acs-kubeconfig.sh \
+            "${CLUSTER_ID}" \
+            "${kubeconfig_path}"
+
+          printf 'KUBECONFIG=%s\n' "${kubeconfig_path}" \
+            >> "${GITHUB_ENV}"
+
+      - name: Verify namespace-scoped deployment access
+        shell: bash
+        env:
+          KUBERNETES_NAMESPACE: ${{ steps.render.outputs.namespace }}
+        run: |
+          set -Eeuo pipefail
+
+          ./scripts/service-deploy-preflight.sh \
+            verify-access \
+            "${KUBERNETES_NAMESPACE}"
+
+      - name: Apply runtime secrets
+        shell: bash
+        env:
+          KUBERNETES_NAMESPACE: ${{ steps.render.outputs.namespace }}
+          ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}
+          ACR_USERNAME: ${{ vars.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          PORTFOLIO_DATABASE_URL: ${{ secrets.PORTFOLIO_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+
+          [[ -n "${ACR_PASSWORD}" ]]
+          [[ -n "${PORTFOLIO_DATABASE_URL}" ]]
+          [[ "${ACR_PASSWORD}" != *$'\n'* ]]
+          [[ "${ACR_PASSWORD}" != *$'\r'* ]]
+          [[ "${PORTFOLIO_DATABASE_URL}" == postgresql+asyncpg://* ]]
+          [[ "${PORTFOLIO_DATABASE_URL}" != *$'\n'* ]]
+          [[ "${PORTFOLIO_DATABASE_URL}" != *$'\r'* ]]
+
+          mask_value() {
+            local escaped_value
+
+            escaped_value="${1//%/%25}"
+            printf '::add-mask::%s\n' "${escaped_value}"
+          }
+
+          mask_value "${ACR_PASSWORD}"
+          mask_value "${PORTFOLIO_DATABASE_URL}"
+
+          ./scripts/apply-service-secrets.sh \
+            "${KUBERNETES_NAMESPACE}" \
+            "${ACR_REGISTRY}" \
+            "${ACR_USERNAME}"
+
+      - name: Run database migration
+        shell: bash
+        env:
+          KUBERNETES_NAMESPACE: ${{ steps.render.outputs.namespace }}
+          MIGRATION_JOB: ${{ steps.render.outputs.migration_job }}
+          RELEASE_DIRECTORY: ${{ steps.render.outputs.release_directory }}
+        run: |
+          set -Eeuo pipefail
+
+          ./scripts/run-service-migration.sh \
+            "${KUBERNETES_NAMESPACE}" \
+            "${MIGRATION_JOB}" \
+            "${RELEASE_DIRECTORY}/migration.yaml"
+
+      - name: Refresh ACS kubeconfig for workload rollout
+        shell: bash
+        env:
+          CLUSTER_ID: ${{ vars.ALIBABA_CLOUD_CLUSTER_ID }}
+          TARGET_ENVIRONMENT: ${{ needs.validate-release.outputs.environment }}
+        run: |
+          set -Eeuo pipefail
+
+          kubeconfig_path="${RUNNER_TEMP}/kubeconfig-workloads-"
+          kubeconfig_path+="${TARGET_ENVIRONMENT}"
+
+          ./scripts/write-acs-kubeconfig.sh \
+            "${CLUSTER_ID}" \
+            "${kubeconfig_path}"
+
+          printf 'KUBECONFIG=%s\n' "${kubeconfig_path}" \
+            >> "${GITHUB_ENV}"
+
+      - name: Record previous workload revisions
+        id: previous
+        shell: bash
+        env:
+          KUBERNETES_NAMESPACE: ${{ steps.render.outputs.namespace }}
+        run: |
+          set -Eeuo pipefail
+
+          ./scripts/service-rollout.sh \
+            capture-revisions \
+            "${KUBERNETES_NAMESPACE}" \
+            >> "${GITHUB_OUTPUT}"
+
+      - name: Apply service workloads
+        id: apply
+        shell: bash
+        env:
+          RELEASE_DIRECTORY: ${{ steps.render.outputs.release_directory }}
+        run: |
+          set -Eeuo pipefail
+
+          workloads_manifest="${RELEASE_DIRECTORY}/workloads.yaml"
+
+          kubectl apply \
+            --server-side \
+            --dry-run=server \
+            --force-conflicts \
+            --field-manager=portfolio-service-delivery \
+            --filename "${workloads_manifest}" \
+            >/dev/null
+
+          printf 'attempted=true\n' >> "${GITHUB_OUTPUT}"
+
+          kubectl apply \
+            --server-side \
+            --force-conflicts \
+            --field-manager=portfolio-service-delivery \
+            --filename "${workloads_manifest}"
+
+      - name: Wait for workload rollouts
+        shell: bash
+        env:
+          KUBERNETES_NAMESPACE: ${{ steps.render.outputs.namespace }}
+        run: |
+          set -Eeuo pipefail
+
+          ./scripts/service-rollout.sh \
+            wait \
+            "${KUBERNETES_NAMESPACE}"
+
+      - name: Smoke-test public service
+        shell: bash
+        env:
+          TARGET_ENVIRONMENT: ${{ needs.validate-release.outputs.environment }}
+          KUBERNETES_NAMESPACE: ${{ steps.render.outputs.namespace }}
+        run: |
+          set -Eeuo pipefail
+
+          base_url="$(
+            ./scripts/smoke-test-service.sh \
+              "${TARGET_ENVIRONMENT}" \
+              "${KUBERNETES_NAMESPACE}"
+          )"
+
+          {
+            printf '### Deployment succeeded\n\n'
+            printf -- '- Environment: %s\n' "${TARGET_ENVIRONMENT}"
+            printf -- '- Endpoint: %s\n' "${base_url}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Roll back failed workload deployment
+        if: ${{ failure() && steps.apply.outputs.attempted == 'true' }}
+        shell: bash
+        env:
+          CLUSTER_ID: ${{ vars.ALIBABA_CLOUD_CLUSTER_ID }}
+          TARGET_ENVIRONMENT: ${{ needs.validate-release.outputs.environment }}
+          KUBERNETES_NAMESPACE: ${{ steps.render.outputs.namespace }}
+          API_EXISTED: ${{ steps.previous.outputs.api_exists }}
+          API_REVISION: ${{ steps.previous.outputs.api_revision }}
+          API_TEMPLATE_HASH: ${{ steps.previous.outputs.api_template_hash }}
+          WEB_EXISTED: ${{ steps.previous.outputs.web_exists }}
+          WEB_REVISION: ${{ steps.previous.outputs.web_revision }}
+          WEB_TEMPLATE_HASH: ${{ steps.previous.outputs.web_template_hash }}
+        run: |
+          set -Eeuo pipefail
+
+          rollback_kubeconfig="${RUNNER_TEMP}/kubeconfig-rollback-"
+          rollback_kubeconfig+="${TARGET_ENVIRONMENT}"
+
+          ./scripts/write-acs-kubeconfig.sh \
+            "${CLUSTER_ID}" \
+            "${rollback_kubeconfig}"
+
+          export KUBECONFIG="${rollback_kubeconfig}"
+
+          ./scripts/service-rollout.sh \
+            rollback \
+            "${KUBERNETES_NAMESPACE}" \
+            "${API_EXISTED}" \
+            "${API_REVISION}" \
+            "${API_TEMPLATE_HASH}" \
+            "${WEB_EXISTED}" \
+            "${WEB_REVISION}" \
+            "${WEB_TEMPLATE_HASH}"
+
+      - name: Remove temporary deployment files
+        if: ${{ always() }}
+        shell: bash
+        env:
+          TARGET_ENVIRONMENT: ${{ needs.validate-release.outputs.environment }}
+        run: |
+          set -Eeuo pipefail
+
+          rm -f -- \
+            "${RUNNER_TEMP}/kubeconfig-${TARGET_ENVIRONMENT}" \
+            "${RUNNER_TEMP}/kubeconfig-workloads-${TARGET_ENVIRONMENT}" \
+            "${RUNNER_TEMP}/kubeconfig-rollback-${TARGET_ENVIRONMENT}" \
+            "${RUNNER_TEMP}/portfolio-api-rollout.log" \
+            "${RUNNER_TEMP}/portfolio-web-rollout.log" \
+            "${RUNNER_TEMP}/portfolio-api-rollback.log" \
+            "${RUNNER_TEMP}/portfolio-web-rollback.log"
+
+          release_directory="${RUNNER_TEMP}/service-release-${TARGET_ENVIRONMENT}"
+
+          case "${release_directory}" in
+            "${RUNNER_TEMP}"/service-release-*)
+              rm -rf -- "${release_directory}"
+              ;;
+            *)
+              printf \
+                'refusing to remove unexpected path: %s\n' \
+                "${release_directory}" \
+                >&2
+              exit 1
+              ;;
+          esac
