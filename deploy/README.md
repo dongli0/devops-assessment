@@ -226,6 +226,18 @@ For each service release:
 7. Render and apply the target overlay with immutable image digests.
 8. Wait for both Deployment rollouts and run HTTP smoke tests.
 
+The workload manifest is owned by the
+`portfolio-service-delivery` server-side apply field manager. The pipeline uses
+`--force-conflicts` for both server-side dry-run and apply so that this single
+desired-state owner can reclaim Deployment template fields changed by
+`kubectl rollout undo`.
+
+Before applying workloads, the pipeline records each Deployment revision and a
+canonical SHA-256 hash of its Pod template. If apply, rollout, or smoke testing
+fails, only a Deployment whose Pod template changed is rolled back to its exact
+previous revision. HPA-only replica changes therefore do not trigger a false
+rollback.
+
 Migrations are not init containers. This prevents concurrent migrations during
 Pod restarts, rolling updates, or HPA scale-out.
 

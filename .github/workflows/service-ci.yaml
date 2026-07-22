@@ -12,7 +12,8 @@ on:
       - "app/api/**"
       - "app/web/**"
       - "compose.yaml"
-      - ".github/workflows/service-ci.yaml"
+      - ".github/workflows/service-*.yaml"
+      - "scripts/*service*.sh"
       - "scripts/render-*.sh"
       - "scripts/*-acs-kubeconfig.sh"
       - "deploy/**"
@@ -115,6 +116,66 @@ jobs:
 
       - name: Validate temporary ACS kubeconfig helper
         run: ./scripts/test-write-acs-kubeconfig.sh
+
+  service-delivery-code:
+    name: Service delivery code
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check Bash syntax
+        run: |
+          scripts=(
+            scripts/apply-service-secrets.sh
+            scripts/run-service-migration.sh
+            scripts/service-deploy-preflight.sh
+            scripts/service-rollout.sh
+            scripts/smoke-test-service.sh
+            scripts/test-service-deploy-helpers.sh
+          )
+
+          for script in "${scripts[@]}"; do
+            bash -n "${script}"
+          done
+
+      - name: Run ShellCheck
+        run: |
+          docker run --rm \
+            --network none \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --volume "${PWD}:/repo:ro" \
+            --workdir /repo \
+            --entrypoint shellcheck \
+            rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            scripts/apply-service-secrets.sh \
+            scripts/run-service-migration.sh \
+            scripts/service-deploy-preflight.sh \
+            scripts/service-rollout.sh \
+            scripts/smoke-test-service.sh \
+            scripts/test-service-deploy-helpers.sh
+
+      - name: Validate GitHub Actions workflows
+        run: |
+          docker run --rm \
+            --network none \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --volume "${PWD}:/repo:ro" \
+            --workdir /repo \
+            rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
+      - name: Test service deployment helpers
+        run: ./scripts/test-service-deploy-helpers.sh
 
   container-images:
     name: Container image / ${{ matrix.component }}
