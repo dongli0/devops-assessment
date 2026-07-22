@@ -38,7 +38,10 @@ output "github_terraform_role_arn" {
   value       = alicloud_ram_role.github.arn
 }
 
-output "github_deploy_role_arn" {
-  description = "RAM role ARN used by the service deployment pipeline."
-  value       = try(alicloud_ram_role.github_deploy[0].arn, null)
+output "github_deploy_role_arns" {
+  description = "RAM role ARN used by each service deployment environment."
+  value = {
+    for environment, role in alicloud_ram_role.github_deploy :
+    environment => role.arn
+  }
 }

@@ -6,9 +6,13 @@ locals {
 }
 
 resource "alicloud_ram_role" "github_deploy" {
-  count = local.service_deployment_identity_enabled ? 1 : 0
+  for_each = (
+    local.service_deployment_identity_enabled ?
+    var.github_deploy_oidc_subjects :
+    tomap({})
+  )
 
-  role_name            = "${var.project_name}-github-deploy"
+  role_name            = "${var.project_name}-github-deploy-${each.key}"
   max_session_duration = 3600
 
   assume_role_policy_document = jsonencode({
@@ -28,7 +32,9 @@ resource "alicloud_ram_role" "github_deploy" {
             "oidc:aud" = [
               "sts.aliyuncs.com",
             ]
-            "oidc:sub" = sort(tolist(var.github_deploy_oidc_subjects))
+            "oidc:sub" = [
+              each.value,
+            ]
           }
         }
       },
@@ -49,6 +55,18 @@ resource "alicloud_ram_policy" "github_deploy" {
       {
         Effect = "Allow"
         Action = [
+          "cs:GetClusters",
+          "cs:DescribeClusterDetail",
+          "cs:GetClusterAuditProject",
+          "cs:DescribeResourcesDeleteProtection",
+        ]
+        Resource = [
+          "acs:cs:${var.region}:${data.alicloud_account.current.id}:cluster/${var.deployment_cluster_id}",
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "cs:DescribeClusterUserKubeconfig",
         ]
         Resource = [
@@ -65,9 +83,28 @@ resource "alicloud_ram_policy" "github_deploy" {
 }
 
 resource "alicloud_ram_role_policy_attachment" "github_deploy" {
-  count = local.service_deployment_identity_enabled ? 1 : 0
+  for_each = alicloud_ram_role.github_deploy
 
   policy_name = alicloud_ram_policy.github_deploy[0].policy_name
   policy_type = alicloud_ram_policy.github_deploy[0].type
-  role_name   = alicloud_ram_role.github_deploy[0].role_name
+  role_name   = each.value.role_name
+}
+
+resource "alicloud_cs_kubernetes_permissions" "github_deploy" {
+  for_each = alicloud_ram_role.github_deploy
+
+  uid = each.value.role_id
+
+  permissions {
+    cluster     = var.deployment_cluster_id
+    role_type   = "namespace"
+    role_name   = "portfolio-service-deployer"
+    namespace   = "portfolio-${each.key}"
+    is_custom   = true
+    is_ram_role = true
+  }
+
+  depends_on = [
+    alicloud_ram_role_policy_attachment.github_deploy,
+  ]
 }

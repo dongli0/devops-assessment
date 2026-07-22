@@ -102,9 +102,9 @@ variable "deployment_cluster_id" {
 }
 
 variable "github_deploy_oidc_subjects" {
-  description = "Exact GitHub Environment OIDC subjects allowed to deploy services."
-  type        = set(string)
-  default     = []
+  description = "Exact GitHub Environment OIDC subject for each service environment."
+  type        = map(string)
+  default     = {}
 
   validation {
     condition = (
@@ -114,16 +114,22 @@ variable "github_deploy_oidc_subjects" {
       ) ||
       (
         var.deployment_cluster_id != null &&
-        length(var.github_deploy_oidc_subjects) >= 1 &&
-        length(var.github_deploy_oidc_subjects) <= 10 &&
+        length(var.github_deploy_oidc_subjects) == 5 &&
         alltrue([
-          for subject in var.github_deploy_oidc_subjects :
+          for environment in keys(var.github_deploy_oidc_subjects) :
+          contains(
+            ["dev", "test", "perf", "staging", "production"],
+            environment,
+          )
+        ]) &&
+        alltrue([
+          for environment, subject in var.github_deploy_oidc_subjects :
           startswith(subject, "repo:") &&
-          strcontains(subject, ":environment:") &&
+          endswith(subject, ":environment:${environment}") &&
           !strcontains(subject, "*")
         ])
       )
     )
-    error_message = "Configure the cluster ID and one to ten exact GitHub Environment subjects together."
+    error_message = "Configure exactly one wildcard-free Environment subject for each of dev, test, perf, staging, and production together with deployment_cluster_id."
   }
 }
