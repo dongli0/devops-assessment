@@ -78,8 +78,15 @@ interface:
 
 ACR Personal instances created on or after September 9, 2024 do not support the
 credential helper or the `GetAuthorizationToken` API. The delivery pipeline
-therefore creates this namespace-scoped Secret from protected GitHub
-Environment credentials belonging to a read-only RAM user.
+therefore uses a fixed registry password, and only one RAM user can set that
+password.
+
+For this assessment, one dedicated RAM user has repository-scoped pull and push
+permissions only for `portfolio-api` and `portfolio-web`. Its fixed credentials
+are stored in protected GitHub Environments and are also used to bootstrap the
+namespace-local pull Secrets. Consequently, those pull Secrets technically
+carry push capability. This is an accepted ACR Personal limitation for the
+assessment and is not a production security design.
 
 The fixed registry password and rendered Secret must never enter Git. The
 registry server must exactly match the image host, such as
