@@ -14,6 +14,7 @@ on:
       - "compose.yaml"
       - ".github/workflows/service-ci.yaml"
       - "scripts/render-*.sh"
+      - "scripts/*-acs-kubeconfig.sh"
       - "deploy/**"
       - "scripts/validate-kubernetes.sh"
   workflow_dispatch:
@@ -111,6 +112,9 @@ jobs:
 
       - name: Validate Kubernetes manifests
         run: ./scripts/validate-kubernetes.sh
+
+      - name: Validate temporary ACS kubeconfig helper
+        run: ./scripts/test-write-acs-kubeconfig.sh
 
   container-images:
     name: Container image / ${{ matrix.component }}
