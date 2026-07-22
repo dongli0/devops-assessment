@@ -11,7 +11,7 @@ on:
     paths:
       - "infra/**"
       - ".github/workflows/infra-*.yaml"
-      - "scripts/validate-terraform.sh"
+      - "scripts/*terraform*.sh"
   workflow_dispatch:
 
 permissions:
@@ -40,7 +40,10 @@ jobs:
           terraform_wrapper: false
 
       - name: Check Bash syntax
-        run: bash -n scripts/validate-terraform.sh
+        run: |
+          bash -n scripts/render-terraform-platform-config.sh
+          bash -n scripts/test-render-terraform-platform-config.sh
+          bash -n scripts/validate-terraform.sh
 
       - name: Run ShellCheck
         run: |
@@ -54,7 +57,12 @@ jobs:
             --workdir /repo \
             --entrypoint shellcheck \
             rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            scripts/render-terraform-platform-config.sh \
+            scripts/test-render-terraform-platform-config.sh \
             scripts/validate-terraform.sh
+
+      - name: Test Terraform platform configuration renderer
+        run: ./scripts/test-render-terraform-platform-config.sh
 
       - name: Validate Terraform code
         run: ./scripts/validate-terraform.sh
