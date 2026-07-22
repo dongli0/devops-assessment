@@ -226,3 +226,101 @@ jobs:
           path: ${{ runner.temp }}/${{ matrix.component }}-image-ref.txt
           if-no-files-found: error
           retention-days: 30
+
+  verify-image-set:
+    name: Verify immutable image set
+    needs:
+      - publish-images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    outputs:
+      source_sha: ${{ steps.verify.outputs.source_sha }}
+      api_image: ${{ steps.verify.outputs.api_image }}
+      web_image: ${{ steps.verify.outputs.web_image }}
+
+    steps:
+      - name: Download image references
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: service-image-*
+          path: ${{ runner.temp }}/image-refs
+          merge-multiple: true
+          digest-mismatch: error
+
+      - name: Verify image set
+        id: verify
+        shell: bash
+        env:
+          SOURCE_SHA: >-
+            ${{ github.event_name == 'workflow_run'
+                && github.event.workflow_run.head_sha
+                || github.sha }}
+          IMAGE_REF_DIR: ${{ runner.temp }}/image-refs
+        run: |
+          set -Eeuo pipefail
+
+          [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+
+          api_file="${IMAGE_REF_DIR}/api-image-ref.txt"
+          web_file="${IMAGE_REF_DIR}/web-image-ref.txt"
+
+          [[ -f "${api_file}" ]]
+          [[ -f "${web_file}" ]]
+
+          file_count="$(
+            find "${IMAGE_REF_DIR}" \
+              -maxdepth 1 \
+              -type f \
+              -name '*-image-ref.txt' |
+              wc -l
+          )"
+          [[ "${file_count}" -eq 2 ]]
+
+          api_image="$(< "${api_file}")"
+          web_image="$(< "${web_file}")"
+
+          registry_pattern='[a-z0-9.-]+\.aliyuncs\.com'
+          namespace_pattern='[a-z0-9]+([._-][a-z0-9]+)*'
+          digest_pattern='sha256:[0-9a-f]{64}'
+
+          api_pattern="^${registry_pattern}/${namespace_pattern}/"
+          api_pattern+="portfolio-api@${digest_pattern}$"
+          web_pattern="^${registry_pattern}/${namespace_pattern}/"
+          web_pattern+="portfolio-web@${digest_pattern}$"
+
+          [[ "${api_image}" =~ ${api_pattern} ]]
+          [[ "${web_image}" =~ ${web_pattern} ]]
+
+          api_location="${api_image%/portfolio-api@*}"
+          web_location="${web_image%/portfolio-web@*}"
+          [[ "${api_location}" == "${web_location}" ]]
+
+          {
+            printf 'source_sha=%s\n' "${SOURCE_SHA}"
+            printf 'api_image=%s\n' "${api_image}"
+            printf 'web_image=%s\n' "${web_image}"
+          } >> "${GITHUB_OUTPUT}"
+
+          release_manifest="${RUNNER_TEMP}/service-release.env"
+
+          {
+            printf 'SOURCE_SHA=%s\n' "${SOURCE_SHA}"
+            printf 'API_IMAGE=%s\n' "${api_image}"
+            printf 'WEB_IMAGE=%s\n' "${web_image}"
+          } > "${release_manifest}"
+
+          printf \
+            '### Verified image set\n\n- Source: %s\n- API: %s\n- Web: %s\n' \
+            "${SOURCE_SHA}" \
+            "${api_image}" \
+            "${web_image}" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Preserve release manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: service-release-${{ steps.verify.outputs.source_sha }}
+          path: ${{ runner.temp }}/service-release.env
+          if-no-files-found: error
+          retention-days: 30
