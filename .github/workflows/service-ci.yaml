@@ -1,0 +1,91 @@
+name: Service CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  merge_group:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/api/**"
+      - "app/web/**"
+      - "compose.yaml"
+      - ".github/workflows/service-ci.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: service-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-quality:
+    name: API quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: app/api
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.10.10"
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: app/api/uv.lock
+          working-directory: app/api
+
+      - name: Synchronize dependencies
+        run: uv sync --frozen --all-groups
+
+      - name: Lint
+        run: uv run --frozen ruff check portfolio_api tests migrations
+
+      - name: Check formatting
+        run: uv run --frozen ruff format --check portfolio_api tests migrations
+
+      - name: Run tests
+        run: uv run --frozen pytest -q
+
+      - name: Run type checking
+        run: uv run --frozen mypy portfolio_api migrations
+
+  web-quality:
+    name: Web quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: app/web
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: app/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run checks
+        run: npm run check
