@@ -8,6 +8,8 @@ on:
         required: true
         type: choice
         options:
+          - infra-plan
+          - infra-apply
           - dev
           - test
           - perf
