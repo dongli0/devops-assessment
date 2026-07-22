@@ -63,6 +63,16 @@ for environment in "${environments[@]}"; do
       ;;
   esac
 
+  if [[ "${environment}" == "production" ]]; then
+    expected_replica_directives=0
+  else
+    expected_replica_directives=1
+  fi
+
+  require_count \
+    "${expected_replica_directives}" \
+    '^replicas:$' \
+    "${repo_root}/deploy/overlays/${environment}/kustomization.yaml"
 
   rendered="${render_dir}/${environment}.yaml"
 
