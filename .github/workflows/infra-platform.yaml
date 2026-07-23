@@ -542,42 +542,56 @@ jobs:
             (.variables_sha256 | test("^[0-9a-f]{64}$"))
           ' "${metadata_file}" >/dev/null
 
-          [[
-            "$(jq --raw-output '.source_sha' "${metadata_file}")" ==
-              "${EXPECTED_SOURCE_SHA}"
-          ]]
-          [[
-            "$(jq --raw-output '.run_id' "${metadata_file}")" ==
-              "${GITHUB_RUN_ID}"
-          ]]
-          [[
-            "$(jq --raw-output '.run_attempt' "${metadata_file}")" ==
-              "${GITHUB_RUN_ATTEMPT}"
-          ]]
-          [[
-            "$(jq --raw-output '.oidc_provider_arn' "${metadata_file}")" ==
-              "${EXPECTED_OIDC_PROVIDER_ARN}"
-          ]]
-          [[
-            "$(jq --raw-output '.terraform_role_arn' "${metadata_file}")" ==
-              "${EXPECTED_TERRAFORM_ROLE_ARN}"
-          ]]
-          [[
-            "$(jq --raw-output '.terraform_version' "${metadata_file}")" ==
-              "$(terraform version -json | jq --raw-output '.terraform_version')"
-          ]]
-          [[
-            "$(jq --raw-output '.plan_sha256' "${metadata_file}")" ==
-              "$(sha256sum "${bundle_dir}/platform.tfplan" | cut -d ' ' -f 1)"
-          ]]
-          [[
-            "$(jq --raw-output '.backend_sha256' "${metadata_file}")" ==
-              "$(sha256sum "${bundle_dir}/backend.hcl" | cut -d ' ' -f 1)"
-          ]]
-          [[
-            "$(jq --raw-output '.variables_sha256' "${metadata_file}")" ==
-              "$(sha256sum "${bundle_dir}/terraform.tfvars.json" | cut -d ' ' -f 1)"
-          ]]
+          require_equal() {
+            local field_name="$1"
+            local actual_value="$2"
+            local expected_value="$3"
+
+            if [[ "${actual_value}" != "${expected_value}" ]]; then
+              printf \
+                'saved plan metadata mismatch: %s\n' \
+                "${field_name}" \
+                >&2
+              exit 1
+            fi
+          }
+
+          require_equal \
+            source_sha \
+            "$(jq --raw-output '.source_sha' "${metadata_file}")" \
+            "${EXPECTED_SOURCE_SHA}"
+          require_equal \
+            run_id \
+            "$(jq --raw-output '.run_id' "${metadata_file}")" \
+            "${GITHUB_RUN_ID}"
+          require_equal \
+            run_attempt \
+            "$(jq --raw-output '.run_attempt' "${metadata_file}")" \
+            "${GITHUB_RUN_ATTEMPT}"
+          require_equal \
+            oidc_provider_arn \
+            "$(jq --raw-output '.oidc_provider_arn' "${metadata_file}")" \
+            "${EXPECTED_OIDC_PROVIDER_ARN}"
+          require_equal \
+            terraform_role_arn \
+            "$(jq --raw-output '.terraform_role_arn' "${metadata_file}")" \
+            "${EXPECTED_TERRAFORM_ROLE_ARN}"
+          require_equal \
+            terraform_version \
+            "$(jq --raw-output '.terraform_version' "${metadata_file}")" \
+            "$(terraform version -json | jq --raw-output '.terraform_version')"
+          require_equal \
+            plan_sha256 \
+            "$(jq --raw-output '.plan_sha256' "${metadata_file}")" \
+            "$(sha256sum "${bundle_dir}/platform.tfplan" | cut -d ' ' -f 1)"
+          require_equal \
+            backend_sha256 \
+            "$(jq --raw-output '.backend_sha256' "${metadata_file}")" \
+            "$(sha256sum "${bundle_dir}/backend.hcl" | cut -d ' ' -f 1)"
+          require_equal \
+            variables_sha256 \
+            "$(jq --raw-output '.variables_sha256' "${metadata_file}")" \
+            "$(sha256sum "${bundle_dir}/terraform.tfvars.json" | cut -d ' ' -f 1)"
 
           rm -rf -- "${download_dir}"
           rm -f -- \
