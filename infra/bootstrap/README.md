@@ -30,6 +30,7 @@ It does not create the VPC, ACS cluster, RDS instance, ALB, or application workl
 - No administrator, product FullAccess, billing, general RAM, or `cluster-admin` permissions are attached to any GitHub role.
 - Some create and list APIs require `Resource = "*"`, so access is constrained through an explicit action allowlist and exact OIDC subjects.
 - ACS default and service-linked roles must be authorized interactively before the platform pipeline runs.
+- RDS PostgreSQL Serverless requires the account-level `AliyunServiceRoleForRdsPgsqlOnEcs` and `AliyunServiceRoleForRDSProxyOnEcs` service-linked roles before the platform pipeline runs.
 - The bootstrap caller must be authorized to manage ACS user permissions; that capability is never delegated to service workflows.
 - The initial bootstrap state is local because the remote backend does not exist yet.
 - The OSS bucket and Tablestore resources use `prevent_destroy`.
