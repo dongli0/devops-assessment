@@ -5,7 +5,8 @@ github_oidc_fingerprints = [
 ]
 
 github_oidc_subjects = [
-  "REPLACE_WITH_EXACT_GITHUB_OIDC_SUBJECT",
+  "REPLACE_WITH_EXACT_INFRA_PLAN_ENVIRONMENT_SUBJECT",
+  "REPLACE_WITH_EXACT_INFRA_APPLY_ENVIRONMENT_SUBJECT",
 ]
 
 # Configure only after the platform apply returns cluster_id.

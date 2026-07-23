@@ -9,7 +9,8 @@ platform needed to build, validate, publish, and deploy it as code.
 - PostgreSQL data layer and one-shot Alembic migrations
 - Terraform-managed Alibaba Cloud platform
 - Kubernetes manifests for five logical environments
-- GitHub Actions CI and staged service delivery
+- GitHub Actions CI, approval-gated infrastructure delivery, and staged service
+  delivery
 
 ## Architecture
 
@@ -17,6 +18,7 @@ platform needed to build, validate, publish, and deploy it as code.
 - [Terraform bootstrap](infra/bootstrap/README.md)
 - [Terraform platform](infra/platform/README.md)
 - [Kubernetes deployment](deploy/README.md)
+- [Infrastructure pipeline design](docs/infra-pipeline-design.md)
 - [Service pipeline design](docs/pipeline-design.md)
 
 ## Local Quick Start
@@ -48,6 +50,8 @@ docker compose down --volumes --remove-orphans
 ## Security Notes
 
 - GitHub Actions use OIDC and temporary Alibaba Cloud credentials.
+- Terraform saved plans are encrypted and bound to their source run before
+  approval.
 - Service roles are isolated by Environment and Kubernetes namespace.
 - Images are scanned and deployed by immutable digest.
 - Workloads run as non-root with restricted security contexts.
