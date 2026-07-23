@@ -1,7 +1,10 @@
 data "alicloud_account" "current" {}
 
 resource "alicloud_ims_oidc_provider" "github" {
-  oidc_provider_name  = "${var.project_name}-github-actions"
+  oidc_provider_name = coalesce(
+    var.github_oidc_provider_name,
+    "${var.project_name}-github-actions",
+  )
   issuer_url          = "https://token.actions.githubusercontent.com"
   client_ids          = ["sts.aliyuncs.com"]
   fingerprints        = var.github_oidc_fingerprints

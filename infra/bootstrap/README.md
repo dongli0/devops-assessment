@@ -34,6 +34,25 @@ It does not create the VPC, ACS cluster, RDS instance, ALB, or application workl
 - The initial bootstrap state is local because the remote backend does not exist yet.
 - The OSS bucket and Tablestore resources use `prevent_destroy`.
 
+## Account and Product Prerequisites
+
+Before running the first mutating bootstrap operation:
+
+- complete Alibaba Cloud account verification and billing setup;
+- confirm that the account has no overdue balance or security restriction;
+- activate OSS and Tablestore in the Alibaba Cloud account;
+- use a RAM administrator only for the initial bootstrap operation; and
+- verify the target account and region with `GetCallerIdentity`.
+
+An OSS `UserDisable` response or a Tablestore `OTSAuthFailed: The user is
+disabled` response is an account or product activation problem. Adding more
+RAM permissions does not resolve it. Stop the apply, preserve the local state,
+and resolve the account status before creating another plan.
+
+Do not create the state bucket or lock table manually after Terraform has
+started managing the bootstrap stack. A failed apply can still create and
+record some resources successfully.
+
 ## Platform Deployment Policy
 
 The platform policy is defined in `platform-policy.tf` and covers only the current Terraform lifecycle:
@@ -130,9 +149,14 @@ For the initial bootstrap apply, configure:
 - `lock_instance_name`: unique Tablestore instance name with 3-16 characters
 - `github_oidc_fingerprints`: current GitHub OIDC HTTPS CA fingerprints
 - `github_oidc_subjects`: exact subject claims permitted to assume the platform Terraform role
+- `github_oidc_provider_name`: optional exact name of an existing account-wide GitHub OIDC provider to adopt
 
 Leave `deployment_cluster_id` as `null` and
 `github_deploy_oidc_subjects` empty during the initial bootstrap apply.
+
+Leave `github_oidc_provider_name` as `null` when Terraform will create the
+provider. Set it only after verifying and importing an existing provider as
+described below.
 
 After the platform cluster and service-access resources exist, configure both
 of these inputs together:
@@ -150,9 +174,65 @@ Use the Alibaba Cloud RAM console fingerprint retrieval function with this issue
 https://token.actions.githubusercontent.com
 ```
 
-Copy the returned SHA-1 fingerprint into `github_oidc_fingerprints`, then cancel the console operation. Terraform remains the owner of the OIDC provider.
+Copy the returned SHA-1 fingerprint into `github_oidc_fingerprints`. If the
+account does not already contain a provider for this issuer, cancel the console
+operation and let Terraform create it. If a provider already exists, do not
+attempt to create another one; verify and adopt it as described below.
 
 Do not permanently hard-code an unverified fingerprint copied from a blog or old example. During certificate rotation, add the new fingerprint before removing the old one.
+
+## Adopt an Existing GitHub OIDC Provider
+
+An OIDC issuer URL must be unique within one Alibaba Cloud account. Before the
+first plan, list account-wide providers and check for the GitHub issuer:
+
+```bash
+aliyun ims ListOIDCProviders \
+  --MaxItems 100 \
+  --profile terraform-bootstrap
+```
+
+If a matching provider exists, verify all of these values before adopting it:
+
+- issuer URL: `https://token.actions.githubusercontent.com`
+- client ID: `sts.aliyuncs.com`
+- every configured SHA-1 fingerprint
+- the exact case-sensitive provider name
+
+Do not delete an existing provider to resolve
+`EntityAlreadyExists.OIDCProvider.Url`. Other RAM roles may already trust its
+ARN.
+
+Set the verified name only in the ignored `terraform.tfvars` file:
+
+```hcl
+github_oidc_provider_name = "EXISTING_PROVIDER_NAME"
+```
+
+The provider name and issuer URL are replacement fields. The configuration
+must therefore match the existing name before import. Back up the local state,
+then import the provider by its exact name:
+
+```bash
+if [[ -f infra/bootstrap/terraform.tfstate ]]; then
+  cp --preserve=mode,timestamps \
+    infra/bootstrap/terraform.tfstate \
+    infra/bootstrap/terraform.tfstate.pre-oidc-import
+
+  chmod 600 \
+    infra/bootstrap/terraform.tfstate \
+    infra/bootstrap/terraform.tfstate.pre-oidc-import
+fi
+
+terraform -chdir=infra/bootstrap import \
+  -input=false \
+  -var-file=terraform.tfvars \
+  alicloud_ims_oidc_provider.github \
+  EXISTING_PROVIDER_NAME
+```
+
+After import, review a fresh plan. It may contain an in-place update for
+mutable metadata, but it must not replace the OIDC provider.
 
 ## GitHub OIDC Subject
 
@@ -321,6 +401,18 @@ The ACR Personal Edition registry password is a separate product limitation and 
 
 Do not delete the local bootstrap state after apply. Keep an encrypted backup until its controlled migration to remote state is complete.
 
+Terraform apply is not transactional. If one resource fails, other resources
+may already have been created and recorded in state. After a partial apply:
+
+1. stop and preserve the current state;
+2. use `terraform state list` to identify successful resources;
+3. inspect each conflict before importing or changing configuration;
+4. resolve account activation and billing errors outside Terraform; and
+5. generate and review a new saved plan against the updated state.
+
+Do not reapply the previous saved plan after the state serial changes.
+Do not remove resources from state merely to make the next plan appear clean.
+
 Do not attempt to destroy bootstrap resources before the platform stack has been destroyed and its final state has been backed up.
 
 A final bootstrap teardown requires:
@@ -336,8 +428,10 @@ Never enable `force_destroy` merely to bypass a failed deletion.
 ## Current Status
 
 - Terraform configuration: validated
-- Alibaba Cloud resources: not yet planned or applied
-- GitHub OIDC claim inspection workflow: implemented and locally validated; not run
+- Bootstrap rollout: recovery in progress after a partial initial apply; the existing GitHub OIDC provider is imported into local state
+- Bootstrap resources already managed: Tablestore lock instance, platform RAM policy, and GitHub OIDC provider
+- Remaining bootstrap resources: pending a fresh reviewed recovery plan
+- GitHub OIDC claim inspection workflow: run for `infra-plan` and `infra-apply`; service environment claims are pending
 - Platform deployment policy: implemented and locally validated; not applied
 - Environment-specific service deployment roles: implemented and locally validated; not applied
 - Namespace-scoped ACS permission assignments: implemented and locally validated; not applied
