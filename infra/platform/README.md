@@ -14,15 +14,15 @@ The environments are logically isolated in Kubernetes and PostgreSQL while shari
 
 ## Managed Resources
 
-| Component | Implementation |
-|---|---|
-| Network | One VPC and two vSwitches in distinct availability zones |
-| Security | One normal ECS Security Group |
-| Kubernetes | One ACS cluster without worker nodes |
-| Cluster add-ons | CoreDNS, Metrics Server, and ALB Ingress Controller |
-| Database | One PostgreSQL 14 Serverless Basic RDS instance |
-| Isolation | One database and application account per environment |
-| Credentials | Randomly generated database password per environment |
+| Component       | Implementation                                           |
+| --------------- | -------------------------------------------------------- |
+| Network         | One VPC and two vSwitches in distinct availability zones |
+| Security        | One normal ECS Security Group                            |
+| Kubernetes      | One ACS cluster without worker nodes                     |
+| Cluster add-ons | CoreDNS, Metrics Server, and ALB Ingress Controller      |
+| Database        | One PostgreSQL 14 Serverless Basic RDS instance          |
+| Isolation       | One database and application account per environment     |
+| Credentials     | Randomly generated database password per environment     |
 
 The platform intentionally does not manage:
 
@@ -169,6 +169,23 @@ A null `kubernetes_version` lets Alibaba Cloud select the current supported vers
 
 The real `terraform.tfvars` file is ignored by Git.
 
+## GitHub Actions Platform Delivery
+
+The manual Infrastructure Delivery workflow manages this platform stack after
+bootstrap is complete.
+
+- `apply=false` creates and encrypts a saved plan without changing resources.
+- `apply=true` creates a fresh plan and waits for the protected `infra-apply`
+  Environment before applying that exact plan.
+- Plans containing deletions or replacements are rejected.
+- Plaintext plan files are never uploaded.
+- Automated destroy is intentionally unsupported.
+
+See the
+[Infrastructure Pipeline Design](../../docs/infra-pipeline-design.md) for
+required repository variables, Environment protection rules, OIDC subjects,
+the encrypted-plan secret, and the first-run sequence.
+
 ## Review the Plan
 
 The following commands query Alibaba Cloud and remote state but do not create platform resources:
@@ -276,6 +293,7 @@ Do not apply a destroy plan without reviewing its exact targets.
 
 - Terraform formatting: validated
 - Terraform configuration: validated
+- Infrastructure CI and approval-gated platform workflow: implemented and locally validated
 - Alibaba Cloud platform plan: not yet created
 - Alibaba Cloud platform resources: not yet applied
 - Remote backend: not yet initialized

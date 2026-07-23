@@ -163,28 +163,27 @@ GitHub OIDC token for one protected environment and displays only the `iss`,
 `aud`, and `sub` claims in the workflow summary. It never prints or preserves
 the complete token.
 
-Create and protect the `dev`, `test`, `perf`, `staging`, and `production`
-GitHub Environments before running it. Run the workflow once for each
-environment and copy the reported `sub` value into the matching
-`github_deploy_oidc_subjects` entry.
+Create and protect the `infra-plan`, `infra-apply`, `dev`, `test`, `perf`,
+`staging`, and `production` GitHub Environments before running it. Run the
+workflow once for each environment.
+
+Copy the `infra-plan` and `infra-apply` subjects into
+`github_oidc_subjects`. Copy each service environment subject into the
+matching `github_deploy_oidc_subjects` entry.
 
 Configure every Environment to allow deployments only from `main`. Require
-manual approval for `perf`, `staging`, and `production`. These controls are
-required because an environment-based OIDC subject identifies the Environment,
-not the source branch that requested it.
+manual approval for `infra-apply`, `staging`, and `production`. These controls
+are required because an environment-based OIDC subject identifies the
+Environment, not the source branch that requested it.
 
-Depending on the repository configuration, the subject may resemble either:
+Each reported subject must end with `:environment:ENVIRONMENT_NAME`. The
+owner and repository portion may use names or immutable numeric IDs depending
+on the repository's OIDC claim customization.
 
-```text
-repo:OWNER/REPOSITORY:ref:refs/heads/main
-```
-
-or an immutable subject containing numeric owner and repository IDs.
-
-Copy only actual values returned by GitHub. Put the platform workflow subject
-in `github_oidc_subjects`. Put each service workflow subject in the matching
-key of `github_deploy_oidc_subjects`; for example, the `dev` value must end in
-`:environment:dev`.
+Copy only actual values returned by GitHub. Put both infrastructure workflow
+subjects in `github_oidc_subjects`. Put each service workflow subject in the
+matching key of `github_deploy_oidc_subjects`; for example, the `dev` value
+must end in `:environment:dev`.
 
 ## Interactive OAuth Authentication
 
@@ -303,10 +302,18 @@ After bootstrap, record these outputs as GitHub repository or environment variab
 
 - `github_oidc_provider_arn` as `ALIBABA_CLOUD_OIDC_PROVIDER_ARN`
 - `github_terraform_role_arn` as `ALIBABA_CLOUD_ROLE_ARN`
+- `state_bucket_name` as `TERRAFORM_STATE_BUCKET`
+- `tablestore_endpoint` as `TERRAFORM_STATE_TABLESTORE_ENDPOINT`
+- `lock_table_name` as `TERRAFORM_STATE_TABLESTORE_TABLE`
 - Each entry of `github_deploy_role_arns` as `ALIBABA_CLOUD_DEPLOY_ROLE_ARN` in its matching protected GitHub Environment
 - Region as `ALIBABA_CLOUD_REGION`
 
 No Alibaba Cloud AccessKey should be added to GitHub.
+
+See the
+[Infrastructure Pipeline Design](../../docs/infra-pipeline-design.md) for the
+complete Environment, variable, encrypted-plan secret, and first-run
+configuration.
 
 The ACR Personal Edition registry password is a separate product limitation and will be stored only as a protected GitHub Environment secret.
 
