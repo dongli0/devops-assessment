@@ -156,16 +156,20 @@ selected.
 | Variable                          | Source                                      | Purpose                                      |
 | --------------------------------- | ------------------------------------------- | -------------------------------------------- |
 | `SERVICE_DELIVERY_ENABLED`        | Set manually                                | Enables automatic delivery only when `true`  |
-| `ACR_REGISTRY`                    | ACR Personal instance endpoint              | Registry hostname without scheme or path     |
+| `ACR_REGISTRY`                    | ACR Personal public endpoint                | GitHub-hosted runner image push hostname     |
+| `ACR_PULL_REGISTRY`               | Matching ACR Personal VPC endpoint          | Private ACS image pull hostname              |
 | `ACR_NAMESPACE`                   | Manually initialized ACR namespace          | Contains the API and Web repositories        |
 | `ACR_USERNAME`                    | Dedicated ACR RAM user                      | Registry login and pull-Secret username      |
 | `ALIBABA_CLOUD_REGION`            | Platform input                              | Alibaba Cloud region, normally `cn-shanghai` |
 | `ALIBABA_CLOUD_CLUSTER_ID`        | Platform `cluster_id` output                | Shared ACS cluster                           |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | Bootstrap `github_oidc_provider_arn` output | GitHub OIDC provider                         |
 
-Do not override the common ACR variables in individual environments. The
-published image location and every deployment environment must use the same
-values.
+Do not override the common ACR variables in individual environments.
+`ACR_REGISTRY` and `ACR_PULL_REGISTRY` must identify the public and VPC
+endpoints of the same ACR Personal instance. GitHub-hosted runners publish
+through the public endpoint. Before rendering Kubernetes manifests, delivery
+replaces only that hostname with the VPC endpoint and preserves the namespace,
+repository, and immutable digest.
 
 ### Protected Environments
 

@@ -383,7 +383,8 @@ migration_script="${repo_root}/scripts/run-service-migration.sh"
 rollout_script="${repo_root}/scripts/service-rollout.sh"
 smoke_script="${repo_root}/scripts/smoke-test-service.sh"
 
-valid_registry="crpi-validation-vpc.cn-shanghai.personal.cr.aliyuncs.com"
+valid_publish_registry="crpi-validation.cn-shanghai.personal.cr.aliyuncs.com"
+valid_pull_registry="crpi-validation-vpc.cn-shanghai.personal.cr.aliyuncs.com"
 valid_oidc_arn="acs:ram::123456789:oidc-provider/github"
 valid_role_arn="acs:ram::123456789:role/portfolio-deploy-dev"
 
@@ -394,7 +395,8 @@ valid_role_arn="acs:ram::123456789:role/portfolio-deploy-dev"
   cvalidation123 \
   "${valid_oidc_arn}" \
   "${valid_role_arn}" \
-  "${valid_registry}" \
+  "${valid_publish_registry}" \
+  "${valid_pull_registry}" \
   portfolio \
   validation-user
 
@@ -407,7 +409,8 @@ expect_failure \
   cvalidation123 \
   "${valid_oidc_arn}" \
   acs:ram::987654321:role/portfolio-deploy-dev \
-  "${valid_registry}" \
+  "${valid_publish_registry}" \
+  "${valid_pull_registry}" \
   portfolio \
   validation-user
 
@@ -421,6 +424,21 @@ expect_failure \
   "${valid_oidc_arn}" \
   "${valid_role_arn}" \
   foo..aliyuncs.com \
+  "${valid_pull_registry}" \
+  portfolio \
+  validation-user
+
+expect_failure \
+  "mismatched ACR VPC endpoint" \
+  "${preflight_script}" \
+  validate-config \
+  dev \
+  cn-shanghai \
+  cvalidation123 \
+  "${valid_oidc_arn}" \
+  "${valid_role_arn}" \
+  "${valid_publish_registry}" \
+  crpi-other-vpc.cn-shanghai.personal.cr.aliyuncs.com \
   portfolio \
   validation-user
 
@@ -446,6 +464,7 @@ required_permissions=(
   "list replicasets.apps"
   "watch replicasets.apps"
   "get jobs.batch"
+  "list jobs.batch"
   "create jobs.batch"
   "watch jobs.batch"
   "get ingresses.networking.k8s.io"
@@ -526,7 +545,7 @@ export PORTFOLIO_DATABASE_URL="postgresql+asyncpg://portfolio:validation@db/port
 GITHUB_ACTIONS=true \
   "${secrets_script}" \
   portfolio-dev \
-  "${valid_registry}" \
+  "${valid_pull_registry}" \
   validation-user \
   >"${test_root}/secrets.stdout" \
   2>"${test_root}/secrets.stderr"
@@ -558,7 +577,7 @@ expected_auth="$(
 )"
 
 jq -e \
-  --arg registry "${valid_registry}" \
+  --arg registry "${valid_pull_registry}" \
   --arg username "validation-user" \
   --arg password "${ACR_PASSWORD}" \
   --arg auth "${expected_auth}" \
@@ -607,7 +626,7 @@ expect_failure \
   PORTFOLIO_DATABASE_URL="${PORTFOLIO_DATABASE_URL}" \
   "${secrets_script}" \
   portfolio-dev \
-  "${valid_registry}" \
+  "${valid_pull_registry}" \
   validation-user
 
 if find "${runner_temp}" \
