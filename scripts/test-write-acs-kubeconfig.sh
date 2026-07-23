@@ -132,6 +132,8 @@ expected_arguments="${test_root}/expected-arguments"
 printf '%s\n' \
   cs \
   DescribeClusterUserKubeconfig \
+  --region \
+  cn-shanghai \
   --ClusterId \
   c-validation123 \
   --TemporaryDurationMinutes \
