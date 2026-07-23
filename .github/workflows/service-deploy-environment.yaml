@@ -469,7 +469,7 @@ jobs:
             wait \
             "${KUBERNETES_NAMESPACE}"
 
-      - name: Smoke-test public service
+      - name: Verify ALB and smoke-test cluster services
         shell: bash
         env:
           TARGET_ENVIRONMENT: ${{ needs.validate-release.outputs.environment }}
@@ -486,7 +486,9 @@ jobs:
           {
             printf '### Deployment succeeded\n\n'
             printf -- '- Environment: %s\n' "${TARGET_ENVIRONMENT}"
-            printf -- '- Endpoint: %s\n' "${base_url}"
+            printf -- '- Internal service smoke: passed\n'
+            printf -- '- ALB endpoint: %s\n' "${base_url}"
+            printf -- '- Public access: requires an ICP-filed custom domain in cn-shanghai\n'
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Roll back failed workload deployment

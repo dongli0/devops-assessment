@@ -107,7 +107,7 @@ flowchart LR
   CAPTURE[Capture Deployment revisions and Pod-template hashes]
   APPLY[Server-side dry-run and apply]
   ROLLOUT[Wait for API and Web rollouts]
-  SMOKE[Smoke-test ALB API and Web paths]
+  SMOKE[Verify ALB assignment and smoke-test API and Web through Service Proxy]
   DONE[Deployment succeeds]
   ROLLBACK[Roll back only changed Deployment templates]
 
@@ -137,9 +137,19 @@ The deployment performs these controls before changing workloads:
 
 Workloads use server-side apply with
 `portfolio-service-delivery` as the single desired-state field manager. If
-apply, rollout, or public smoke testing fails, the pipeline compares canonical
-Pod-template hashes and rolls back only Deployments that changed. HPA-only
-replica changes do not trigger rollback.
+apply, rollout, or internal service smoke testing fails, the pipeline compares
+canonical Pod-template hashes and rolls back only Deployments that changed.
+HPA-only replica changes do not trigger rollback.
+
+The assessment has no ICP-filed custom domain. Alibaba Cloud blocks unfiled
+public website access to Chinese mainland resources, so treating the generated
+ALB hostname as a public application URL would produce a provider-level HTTP 403. See the
+[Alibaba Cloud ICP filing guidance](https://www.alibabacloud.com/help/en/icp-filing/basic-icp-service/product-overview/what-is-an-icp-filing).
+Delivery still requires the Ingress controller to assign a valid ALB hostname,
+then verifies the API readiness response and Web document through the
+Kubernetes API Service Proxy. This proves the deployed Service-to-Pod path
+without claiming that the public endpoint is accessible. A long-lived public
+deployment must use an ICP-filed custom domain and HTTPS.
 
 Database migrations are forward-only. Every schema change must be backward
 compatible with both the previous and new application versions. Use an
@@ -260,7 +270,9 @@ network-disabled container.
 
 - ACR Personal uses a fixed password rather than a short-lived registry token.
 - The same ACR credential is used to publish images and create pull Secrets.
-- The assessment endpoint is HTTP-only.
+- The cn-shanghai ALB has no ICP-filed custom domain. Delivery validates ALB
+  assignment and performs HTTP smoke tests through the Kubernetes Service
+  Proxy instead of claiming public reachability.
 - All environments share one ACS cluster, ALB, and RDS instance.
 - Rollback restores application Deployment templates; it does not reverse a
   completed database migration.

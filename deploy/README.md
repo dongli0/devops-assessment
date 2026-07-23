@@ -181,9 +181,14 @@ See the
 [shared ALB runbook](platform/alicloud-alb/cluster/README.md)
 for rendering, validation, apply order, and teardown instructions.
 
-Only HTTP is configured for the short-lived assessment endpoint. A long-lived
-public service must add an HTTPS listener and managed certificate before
-production use.
+Only HTTP is configured on the short-lived assessment ALB, and this repository
+does not have an ICP-filed custom domain. Alibaba Cloud therefore blocks public
+website access to the generated ALB hostname in cn-shanghai. Delivery verifies
+that the Ingress receives an ALB hostname, then smoke-tests the API and Web
+Services through the Kubernetes API Service Proxy. This validates the
+Service-to-Pod path without claiming public reachability. A long-lived public
+service must use an ICP-filed custom domain, HTTPS listener, and managed
+certificate.
 
 ## Validation
 
@@ -227,7 +232,8 @@ For each service release:
 5. Create the Job and wait for the `Complete` condition.
 6. Stop the release and collect Job logs if migration fails.
 7. Render and apply the target overlay with immutable image digests.
-8. Wait for both Deployment rollouts and run HTTP smoke tests.
+8. Wait for both Deployment rollouts, verify ALB assignment, and run internal
+   HTTP smoke tests through the Kubernetes API Service Proxy.
 
 The workload manifest is owned by the
 `portfolio-service-delivery` server-side apply field manager. The pipeline uses

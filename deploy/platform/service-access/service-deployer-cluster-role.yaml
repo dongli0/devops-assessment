@@ -33,6 +33,13 @@ rules:
       - get
 
   - apiGroups:
+      - ""
+    resources:
+      - services/proxy
+    verbs:
+      - get
+
+  - apiGroups:
       - apps
     resources:
       - deployments

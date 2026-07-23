@@ -104,6 +104,7 @@ verify_access() {
     "get services"
     "create services"
     "patch services"
+    "get services/proxy"
     "get pods"
     "list pods"
     "get pods/log"
