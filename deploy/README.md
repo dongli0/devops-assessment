@@ -90,8 +90,11 @@ carry push capability. This is an accepted ACR Personal limitation for the
 assessment and is not a production security design.
 
 The fixed registry password and rendered Secret must never enter Git. The
-registry server must exactly match the image host, such as
-`crpi-example.cn-shanghai.personal.cr.aliyuncs.com`.
+registry server must exactly match the deployed image host. GitHub-hosted
+runners publish through the ACR public endpoint, while the private ACS cluster
+pulls the same immutable digest through the matching VPC endpoint, such as
+`crpi-example-vpc.cn-shanghai.personal.cr.aliyuncs.com`. This split is required
+because the cluster does not use a NAT Gateway.
 
 See the
 [ACR Personal documentation](https://help.aliyun.com/en/acr/user-guide/use-a-container-registry-personal-edition-instance-to-push-and-pull-images)

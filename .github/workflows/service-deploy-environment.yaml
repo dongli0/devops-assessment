@@ -178,6 +178,7 @@ jobs:
           OIDC_PROVIDER_ARN: ${{ vars.ALIBABA_CLOUD_OIDC_PROVIDER_ARN }}
           DEPLOY_ROLE_ARN: ${{ vars.ALIBABA_CLOUD_DEPLOY_ROLE_ARN }}
           ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}
+          ACR_PULL_REGISTRY: ${{ vars.ACR_PULL_REGISTRY }}
           ACR_NAMESPACE: ${{ vars.ACR_NAMESPACE }}
           ACR_USERNAME: ${{ vars.ACR_USERNAME }}
         run: |
@@ -191,6 +192,7 @@ jobs:
             "${OIDC_PROVIDER_ARN}" \
             "${DEPLOY_ROLE_ARN}" \
             "${ACR_REGISTRY}" \
+            "${ACR_PULL_REGISTRY}" \
             "${ACR_NAMESPACE}" \
             "${ACR_USERNAME}"
 
@@ -274,17 +276,31 @@ jobs:
           SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
           API_IMAGE: ${{ needs.validate-release.outputs.api_image }}
           WEB_IMAGE: ${{ needs.validate-release.outputs.web_image }}
+          ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}
+          ACR_PULL_REGISTRY: ${{ vars.ACR_PULL_REGISTRY }}
+          ACR_NAMESPACE: ${{ vars.ACR_NAMESPACE }}
         run: |
           set -Eeuo pipefail
 
           release_directory="${RUNNER_TEMP}/service-release-${TARGET_ENVIRONMENT}"
           deployment_id="r${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-"
           deployment_id+="${SOURCE_SHA:0:8}"
+          publish_prefix="${ACR_REGISTRY}/${ACR_NAMESPACE}/"
+          pull_prefix="${ACR_PULL_REGISTRY}/${ACR_NAMESPACE}/"
+
+          [[ "${API_IMAGE}" == "${publish_prefix}portfolio-api@sha256:"* ]]
+          [[ "${WEB_IMAGE}" == "${publish_prefix}portfolio-web@sha256:"* ]]
+
+          api_image="${pull_prefix}${API_IMAGE:${#publish_prefix}}"
+          web_image="${pull_prefix}${WEB_IMAGE:${#publish_prefix}}"
+
+          [[ "${api_image##*@sha256:}" == "${API_IMAGE##*@sha256:}" ]]
+          [[ "${web_image##*@sha256:}" == "${WEB_IMAGE##*@sha256:}" ]]
 
           ./scripts/render-service-release.sh \
             "${TARGET_ENVIRONMENT}" \
-            "${API_IMAGE}" \
-            "${WEB_IMAGE}" \
+            "${api_image}" \
+            "${web_image}" \
             "${deployment_id}" \
             "${release_directory}"
 
@@ -341,7 +357,7 @@ jobs:
         shell: bash
         env:
           KUBERNETES_NAMESPACE: ${{ steps.render.outputs.namespace }}
-          ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}
+          ACR_PULL_REGISTRY: ${{ vars.ACR_PULL_REGISTRY }}
           ACR_USERNAME: ${{ vars.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
           PORTFOLIO_DATABASE_URL: ${{ secrets.PORTFOLIO_DATABASE_URL }}
@@ -368,7 +384,7 @@ jobs:
 
           ./scripts/apply-service-secrets.sh \
             "${KUBERNETES_NAMESPACE}" \
-            "${ACR_REGISTRY}" \
+            "${ACR_PULL_REGISTRY}" \
             "${ACR_USERNAME}"
 
       - name: Run database migration

@@ -15,8 +15,8 @@ validate_environment() {
 }
 
 validate_config() {
-  if [[ "$#" -ne 8 ]]; then
-    fail "validate-config requires 8 arguments"
+  if [[ "$#" -ne 9 ]]; then
+    fail "validate-config requires 9 arguments"
   fi
 
   local environment="$1"
@@ -24,12 +24,16 @@ validate_config() {
   local cluster_id="$3"
   local oidc_provider_arn="$4"
   local deploy_role_arn="$5"
-  local acr_registry="$6"
-  local acr_namespace="$7"
-  local acr_username="$8"
+  local acr_publish_registry="$6"
+  local acr_pull_registry="$7"
+  local acr_namespace="$8"
+  local acr_username="$9"
+  local acr_instance_id
+  local acr_registry_region
+  local expected_acr_pull_registry
   local oidc_account_id
   local role_account_id
-  local registry_pattern='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.aliyuncs\.com$'
+  local acr_publish_pattern='^crpi-([a-z0-9]+)\.([a-z0-9-]+)\.personal\.cr\.aliyuncs\.com$'
 
   validate_environment "${environment}"
 
@@ -54,11 +58,21 @@ validate_config() {
   [[ "${oidc_account_id}" == "${role_account_id}" ]] ||
     fail "OIDC provider and deployment role belong to different accounts"
 
-  [[ "${acr_registry}" =~ ${registry_pattern} ]] ||
-    fail "invalid ACR registry"
+  if [[ "${acr_publish_registry}" =~ ${acr_publish_pattern} ]]; then
+    acr_instance_id="${BASH_REMATCH[1]}"
+    acr_registry_region="${BASH_REMATCH[2]}"
+  else
+    fail "invalid ACR Personal publish registry"
+  fi
 
-  [[ "${acr_registry}" != */* ]] ||
-    fail "ACR registry must not contain a path"
+  [[ "${acr_registry_region}" == "${region}" ]] ||
+    fail "ACR Personal publish registry is in a different region"
+
+  expected_acr_pull_registry="crpi-${acr_instance_id}-vpc."
+  expected_acr_pull_registry+="${region}.personal.cr.aliyuncs.com"
+
+  [[ "${acr_pull_registry}" == "${expected_acr_pull_registry}" ]] ||
+    fail "ACR pull registry must be the matching VPC endpoint"
 
   [[ "${acr_namespace}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] ||
     fail "invalid ACR namespace"
@@ -101,6 +115,7 @@ verify_access() {
     "list replicasets.apps"
     "watch replicasets.apps"
     "get jobs.batch"
+    "list jobs.batch"
     "create jobs.batch"
     "watch jobs.batch"
     "get ingresses.networking.k8s.io"
