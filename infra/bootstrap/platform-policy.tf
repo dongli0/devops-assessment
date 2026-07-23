@@ -45,7 +45,7 @@ resource "alicloud_ram_policy" "github_platform" {
       {
         Effect = "Allow"
         Action = [
-          "alb:ListAvailableZones",
+          "alb:DescribeZones",
         ]
         Resource = ["*"]
       },
@@ -72,7 +72,7 @@ resource "alicloud_ram_policy" "github_platform" {
         Effect = "Allow"
         Action = [
           "rds:DescribeRegions",
-          "rds:DescribeAvailableResource",
+          "rds:DescribeAvailableZones",
           "rds:CreateDBInstance",
           "rds:DescribeDBInstances",
           "rds:DescribeDBInstanceAttribute",
