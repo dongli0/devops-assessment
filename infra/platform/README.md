@@ -62,7 +62,7 @@ Before planning this stack:
 
 1. Activate the required Alibaba Cloud services.
 2. Complete the ACS default-role authorization using the Alibaba Cloud account.
-3. Authorize the RDS PostgreSQL service-linked role `AliyunServiceRoleForRdsPgsqlOnEcs` using the Alibaba Cloud account.
+3. Authorize the RDS PostgreSQL Serverless service-linked roles `AliyunServiceRoleForRdsPgsqlOnEcs` and `AliyunServiceRoleForRDSProxyOnEcs` using the Alibaba Cloud account.
 4. Apply the `infra/bootstrap` stack.
 5. Configure the OSS remote backend.
 6. Authenticate using either the local OAuth profile or the GitHub OIDC role.
