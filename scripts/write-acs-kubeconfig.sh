@@ -63,6 +63,7 @@ output_temp="$(
 )"
 
 aliyun cs DescribeClusterUserKubeconfig \
+  --region "${region_id}" \
   --ClusterId "${cluster_id}" \
   --TemporaryDurationMinutes 15 \
   --PrivateIpAddress false \
