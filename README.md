@@ -62,5 +62,7 @@ docker compose down --volumes --remove-orphans
 
 This is a shared, cost-optimized assessment platform rather than a production
 reference architecture. The five environments share one ACS cluster, ALB, and
-RDS instance. ACR Personal requires a fixed registry password, and the public
-assessment endpoint is HTTP-only.
+RDS instance. ACR Personal requires a fixed registry password. Because the
+cn-shanghai assessment has no ICP-filed custom domain, delivery validates ALB
+assignment but runs application smoke tests through the Kubernetes API Service
+Proxy instead of claiming public reachability.

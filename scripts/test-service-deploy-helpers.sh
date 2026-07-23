@@ -18,7 +18,6 @@ fi
 test_root="$(mktemp -d "${test_parent}/portfolio-service-tests.XXXXXX")"
 mock_bin="${test_root}/bin"
 mock_log="${test_root}/kubectl.log"
-curl_log="${test_root}/curl.log"
 mock_counter="${test_root}/counter"
 capture_directory="${test_root}/captured"
 runner_temp="${test_root}/runner"
@@ -41,7 +40,6 @@ trap 'exit 129' HUP
 
 mkdir -- "${mock_bin}" "${capture_directory}" "${runner_temp}"
 : > "${mock_log}"
-: > "${curl_log}"
 
 fail_test() {
   printf 'test failure: %s\n' "$1" >&2
@@ -75,13 +73,11 @@ expect_failure() {
 
 reset_mocks() {
   : > "${mock_log}"
-  : > "${curl_log}"
   rm -f -- "${mock_counter}" "${capture_directory}"/*
   rm -f -- \
     "${runner_temp}"/portfolio-*-rollout.log \
     "${runner_temp}"/portfolio-*-rollback.log
   rm -rf -- "${runner_temp}"/service-secrets.*
-  export MOCK_CURL_MODE="success"
 }
 
 cat > "${mock_bin}/kubectl" <<'MOCK_KUBECTL'
@@ -245,41 +241,69 @@ case "${MOCK_SCENARIO}" in
     exit 90
     ;;
 
-  smoke-success | smoke-curl-failure | smoke-invalid-host | smoke-ip-only)
+  smoke-success | smoke-service-failure | smoke-invalid-host | smoke-ip-only)
     : "${MOCK_COUNTER:?}"
 
     if [[ "${1:-}" != "get" ]]; then
       exit 90
     fi
 
-    count=0
-    if [[ -f "${MOCK_COUNTER}" ]]; then
-      count="$(< "${MOCK_COUNTER}")"
-    fi
-    count="$((count + 1))"
-    printf '%s\n' "${count}" > "${MOCK_COUNTER}"
+    if has_argument "ingress/portfolio" "$@"; then
+      count=0
+      if [[ -f "${MOCK_COUNTER}" ]]; then
+        count="$(< "${MOCK_COUNTER}")"
+      fi
+      count="$((count + 1))"
+      printf '%s\n' "${count}" > "${MOCK_COUNTER}"
 
-    case "${MOCK_SCENARIO}" in
-      smoke-success)
-        if [[ "${count}" -eq 1 ]]; then
-          exit 1
-        fi
-        printf '%s\n' \
-          '{"status":{"loadBalancer":{"ingress":[{"hostname":"alb-validation.cn-shanghai.alb.aliyuncsslb.com"}]}}}'
-        ;;
-      smoke-curl-failure)
-        printf '%s\n' \
-          '{"status":{"loadBalancer":{"ingress":[{"hostname":"alb-validation.cn-shanghai.alb.aliyuncsslb.com"}]}}}'
-        ;;
-      smoke-invalid-host)
-        printf '%s\n' \
-          '{"status":{"loadBalancer":{"ingress":[{"hostname":"example.com"}]}}}'
-        ;;
-      smoke-ip-only)
-        printf '%s\n' \
-          '{"status":{"loadBalancer":{"ingress":[{"ip":"203.0.113.10"}]}}}'
-        ;;
-    esac
+      case "${MOCK_SCENARIO}" in
+        smoke-success)
+          if [[ "${count}" -eq 1 ]]; then
+            exit 1
+          fi
+          printf '%s\n' \
+            '{"status":{"loadBalancer":{"ingress":[{"hostname":"alb-validation.cn-shanghai.alb.aliyuncsslb.com"}]}}}'
+          ;;
+        smoke-service-failure)
+          printf '%s\n' \
+            '{"status":{"loadBalancer":{"ingress":[{"hostname":"alb-validation.cn-shanghai.alb.aliyuncsslb.com"}]}}}'
+          ;;
+        smoke-invalid-host)
+          printf '%s\n' \
+            '{"status":{"loadBalancer":{"ingress":[{"hostname":"example.com"}]}}}'
+          ;;
+        smoke-ip-only)
+          printf '%s\n' \
+            '{"status":{"loadBalancer":{"ingress":[{"ip":"203.0.113.10"}]}}}'
+          ;;
+      esac
+      exit 0
+    fi
+
+    if has_argument \
+      "/api/v1/namespaces/portfolio-dev/services/http:portfolio-api:8000/proxy/dev/api/health/ready" \
+      "$@"; then
+      if [[ "${MOCK_SCENARIO}" == "smoke-service-failure" ]]; then
+        exit 1
+      fi
+
+      printf '%s\n' '{"status":"ready","environment":"dev"}'
+      exit 0
+    fi
+
+    if has_argument \
+      "/api/v1/namespaces/portfolio-dev/services/http:portfolio-web:8080/proxy/dev/" \
+      "$@"; then
+      if [[ "${MOCK_SCENARIO}" == "smoke-service-failure" ]]; then
+        exit 1
+      fi
+
+      printf '%s\n' \
+        '<!doctype html><html><head><title>Darren Li | Senior DevOps Engineer</title></head></html>'
+      exit 0
+    fi
+
+    exit 90
     ;;
 
   rollout-wait-success | rollout-wait-failure)
@@ -342,23 +366,6 @@ case "${MOCK_SCENARIO}" in
 esac
 MOCK_KUBECTL
 
-cat > "${mock_bin}/curl" <<'MOCK_CURL'
-#!/usr/bin/env bash
-
-set -Eeuo pipefail
-
-: "${MOCK_CURL_LOG:?}"
-
-url="${!#}"
-printf '%s\n' "${url}" >> "${MOCK_CURL_LOG}"
-
-case "${MOCK_CURL_MODE:-success}" in
-  success) ;;
-  failure) exit 22 ;;
-  *) exit 90 ;;
-esac
-MOCK_CURL
-
 cat > "${mock_bin}/sleep" <<'MOCK_SLEEP'
 #!/usr/bin/env bash
 
@@ -368,12 +375,10 @@ MOCK_SLEEP
 
 chmod 0755 \
   "${mock_bin}/kubectl" \
-  "${mock_bin}/curl" \
   "${mock_bin}/sleep"
 
 export PATH="${mock_bin}:${PATH}"
 export MOCK_LOG="${mock_log}"
-export MOCK_CURL_LOG="${curl_log}"
 export MOCK_COUNTER="${mock_counter}"
 export MOCK_CAPTURE_DIR="${capture_directory}"
 
@@ -453,10 +458,12 @@ required_permissions=(
   "get services"
   "create services"
   "patch services"
+  "get services/proxy"
   "get pods"
   "list pods"
   "get pods/log"
   "get deployments.apps"
+  "list deployments.apps"
   "create deployments.apps"
   "patch deployments.apps"
   "watch deployments.apps"
@@ -729,32 +736,31 @@ assert_equal \
 
 assert_equal \
   "2" \
-  "$(grep -c '^kubectl get ' "${mock_log}")" \
+  "$(grep -c 'ingress/portfolio' "${mock_log}")" \
   "Ingress retry count"
 
 grep -Fqx \
-  "${base_url}/dev/api/health/ready" \
-  "${curl_log}" ||
-  fail_test "API readiness URL was not requested"
+  'kubectl get --raw /api/v1/namespaces/portfolio-dev/services/http:portfolio-api:8000/proxy/dev/api/health/ready' \
+  "${mock_log}" ||
+  fail_test "API Service Proxy readiness path was not requested"
 
 grep -Fqx \
-  "${base_url}/dev/" \
-  "${curl_log}" ||
-  fail_test "Web URL was not requested"
+  'kubectl get --raw /api/v1/namespaces/portfolio-dev/services/http:portfolio-web:8080/proxy/dev/' \
+  "${mock_log}" ||
+  fail_test "Web Service Proxy path was not requested"
 
 reset_mocks
-export MOCK_SCENARIO="smoke-curl-failure"
-export MOCK_CURL_MODE="failure"
+export MOCK_SCENARIO="smoke-service-failure"
 expect_failure \
-  "persistently unavailable public service" \
+  "persistently unavailable cluster service" \
   "${smoke_script}" \
   dev \
   portfolio-dev
 
 assert_equal \
   "36" \
-  "$(wc -l < "${curl_log}")" \
-  "public service retry request count"
+  "$(grep -c '^kubectl get --raw ' "${mock_log}")" \
+  "internal service retry request count"
 
 reset_mocks
 export MOCK_SCENARIO="smoke-invalid-host"
@@ -764,8 +770,9 @@ expect_failure \
   dev \
   portfolio-dev
 
-[[ ! -s "${curl_log}" ]] ||
-  fail_test "untrusted Ingress hostname reached curl"
+if grep -q '^kubectl get --raw ' "${mock_log}"; then
+  fail_test "untrusted Ingress hostname reached Service Proxy"
+fi
 
 reset_mocks
 export MOCK_SCENARIO="smoke-ip-only"
@@ -775,8 +782,9 @@ expect_failure \
   dev \
   portfolio-dev
 
-[[ ! -s "${curl_log}" ]] ||
-  fail_test "IP-only Ingress endpoint reached curl"
+if grep -q '^kubectl get --raw ' "${mock_log}"; then
+  fail_test "IP-only Ingress endpoint reached Service Proxy"
+fi
 
 reset_mocks
 export MOCK_SCENARIO="rollout-capture"
