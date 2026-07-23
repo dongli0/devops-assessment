@@ -337,6 +337,9 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/service-deploy-environment.yaml
+    secrets:
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      PORTFOLIO_DATABASE_URL: ${{ secrets.PORTFOLIO_DATABASE_URL }}
     with:
       environment: dev
       source_sha: ${{ needs.verify-image-set.outputs.source_sha }}
@@ -352,6 +355,9 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/service-deploy-environment.yaml
+    secrets:
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      PORTFOLIO_DATABASE_URL: ${{ secrets.PORTFOLIO_DATABASE_URL }}
     with:
       environment: test
       source_sha: ${{ needs.verify-image-set.outputs.source_sha }}
@@ -367,6 +373,9 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/service-deploy-environment.yaml
+    secrets:
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      PORTFOLIO_DATABASE_URL: ${{ secrets.PORTFOLIO_DATABASE_URL }}
     with:
       environment: perf
       source_sha: ${{ needs.verify-image-set.outputs.source_sha }}
@@ -382,6 +391,9 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/service-deploy-environment.yaml
+    secrets:
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      PORTFOLIO_DATABASE_URL: ${{ secrets.PORTFOLIO_DATABASE_URL }}
     with:
       environment: staging
       source_sha: ${{ needs.verify-image-set.outputs.source_sha }}
@@ -397,6 +409,9 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/service-deploy-environment.yaml
+    secrets:
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      PORTFOLIO_DATABASE_URL: ${{ secrets.PORTFOLIO_DATABASE_URL }}
     with:
       environment: production
       source_sha: ${{ needs.verify-image-set.outputs.source_sha }}
