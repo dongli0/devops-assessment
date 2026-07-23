@@ -23,7 +23,9 @@ resource "alicloud_ram_role" "github_deploy" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = alicloud_ims_oidc_provider.github.arn
+          Federated = [
+            alicloud_ims_oidc_provider.github.arn,
+          ]
         }
         Action = "sts:AssumeRole"
         Condition = {
