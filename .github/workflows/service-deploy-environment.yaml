@@ -19,6 +19,13 @@ on:
         description: Immutable Web image reference
         required: true
         type: string
+    secrets:
+      ACR_PASSWORD:
+        description: Dedicated ACR Personal registry password
+        required: true
+      PORTFOLIO_DATABASE_URL:
+        description: Environment-specific PostgreSQL connection URL
+        required: true
 
 permissions: {}
 
