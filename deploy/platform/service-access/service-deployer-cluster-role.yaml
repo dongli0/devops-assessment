@@ -38,6 +38,7 @@ rules:
       - deployments
     verbs:
       - get
+      - list
       - create
       - patch
       - watch

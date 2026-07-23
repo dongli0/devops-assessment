@@ -457,6 +457,7 @@ required_permissions=(
   "list pods"
   "get pods/log"
   "get deployments.apps"
+  "list deployments.apps"
   "create deployments.apps"
   "patch deployments.apps"
   "watch deployments.apps"
