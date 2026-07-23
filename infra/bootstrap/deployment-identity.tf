@@ -3,14 +3,16 @@ locals {
     var.deployment_cluster_id != null &&
     length(var.github_deploy_oidc_subjects) > 0
   )
-}
 
-resource "alicloud_ram_role" "github_deploy" {
-  for_each = (
+  service_deployment_identities = (
     local.service_deployment_identity_enabled ?
     var.github_deploy_oidc_subjects :
     tomap({})
   )
+}
+
+resource "alicloud_ram_role" "github_deploy" {
+  for_each = local.service_deployment_identities
 
   role_name            = "${var.project_name}-github-deploy-${each.key}"
   max_session_duration = 3600
@@ -83,18 +85,18 @@ resource "alicloud_ram_policy" "github_deploy" {
 }
 
 resource "alicloud_ram_role_policy_attachment" "github_deploy" {
-  for_each = alicloud_ram_role.github_deploy
+  for_each = local.service_deployment_identities
 
   policy_name = alicloud_ram_policy.github_deploy[0].policy_name
   policy_type = alicloud_ram_policy.github_deploy[0].type
-  role_name   = each.value.role_name
+  role_name   = alicloud_ram_role.github_deploy[each.key].role_name
 }
 
+
 resource "alicloud_cs_kubernetes_permissions" "github_deploy" {
-  for_each = alicloud_ram_role.github_deploy
+  for_each = local.service_deployment_identities
 
-  uid = each.value.role_id
-
+  uid = alicloud_ram_role.github_deploy[each.key].role_id
   permissions {
     cluster     = var.deployment_cluster_id
     role_type   = "namespace"

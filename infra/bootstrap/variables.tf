@@ -15,6 +15,26 @@ variable "project_name" {
   }
 }
 
+variable "github_oidc_provider_name" {
+  description = "Existing account-wide GitHub OIDC provider name, or null to derive one."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.github_oidc_provider_name == null ||
+      can(
+        regex(
+          "^[A-Za-z0-9]([A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$",
+          var.github_oidc_provider_name,
+        )
+      )
+    )
+    error_message = "github_oidc_provider_name must be null or a valid OIDC provider name."
+  }
+}
+
 variable "state_bucket_name" {
   description = "Globally unique OSS bucket name for Terraform state."
   type        = string
